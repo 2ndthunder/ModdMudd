@@ -82,15 +82,17 @@ void ModdMuddEditor::changeListenerCallback (juce::ChangeBroadcaster* source)
     if (source == &processor.getCatalog())
         return;   // scan progress is shown by the timer
 
-    if ((int) processor.getSlots().size() != slotCountShown || ! hosted.isShowingNative())
-    {
-        rebuildSlotButtons();
+    // Only rebuild the centre view when the set of hosted plug-ins changed;
+    // the parameter list updates itself for routing changes.
+    juce::StringArray uids;
+    for (auto& s : processor.getSlots())
+        uids.add (s->getUid() + (s->isMissing() ? "?" : ""));
+
+    const bool slotsChanged = uids != slotUidsShown;
+    rebuildSlotButtons();
+
+    if (slotsChanged)
         showSelectedSlot();
-    }
-    else
-    {
-        rebuildSlotButtons();
-    }
 }
 
 void ModdMuddEditor::timerCallback()
@@ -122,7 +124,9 @@ void ModdMuddEditor::rebuildSlotButtons()
     slotButtons.clear();
 
     const auto& slots = processor.getSlots();
-    slotCountShown = (int) slots.size();
+    slotUidsShown.clear();
+    for (auto& s : slots)
+        slotUidsShown.add (s->getUid() + (s->isMissing() ? "?" : ""));
     selectedSlot = juce::jlimit (0, juce::jmax (0, (int) slots.size() - 1), selectedSlot);
 
     for (int i = 0; i < (int) slots.size(); ++i)

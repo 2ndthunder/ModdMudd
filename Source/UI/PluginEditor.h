@@ -54,7 +54,7 @@ private:
     int selectedTab = 0;
     bool preferNative = true;
     juce::String lastCatalogStatus;
-    int slotCountShown = -1;
+    juce::StringArray slotUidsShown;
 
     static constexpr int topBarHeight = 44, bottomHeight = 260, statusHeight = 24, gap = 6, minWidth = 1000;
 

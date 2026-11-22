@@ -7,7 +7,8 @@ This file lists only what has actually been tested. Anything not listed is untes
 | Platform | Compiler | Status | Date |
 |---|---|---|---|
 | Ubuntu 24.04 x86_64 | GCC 13.3 | Builds; unit tests, hosting test and pluginval pass | 2026-11-22 |
-| macOS (GitHub Actions `macos-14`, universal) | Apple Clang | Set up in CI; results on the CI page | — |
+| macOS (GitHub Actions `macos-latest`, universal) | Apple Clang | Set up in CI; results on the CI page | — |
+| Ubuntu 24.04 x86_64 (GitHub Actions) | GCC | Builds; unit tests, hosting test and pluginval (strictness 8) pass | 2026-11-22 |
 
 ## Validation
 
