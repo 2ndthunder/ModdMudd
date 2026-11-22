@@ -9,6 +9,19 @@ namespace mm
 
 const Palette& paletteFor (const juce::Component& c);
 
+/** Something that redraws live values. The editor runs one shared timer and
+    refreshes only components that are showing, instead of every widget
+    running its own timer (which also keeps hidden panels busy). */
+struct Refreshable
+{
+    virtual ~Refreshable() = default;
+    virtual void refresh() = 0;
+};
+
+/** Calls refresh() on every visible Refreshable under root. Hidden
+    subtrees are skipped. */
+void refreshShowing (juce::Component& root);
+
 /** Drag-and-drop description used for modulation sources. */
 inline juce::String sourceDragId (int source)       { return "mmsrc:" + juce::String (source); }
 inline int sourceFromDragId (const juce::var& d)    { auto s = d.toString(); return s.startsWith ("mmsrc:") ? s.substring (6).getIntValue() : -1; }
@@ -123,7 +136,7 @@ private:
     source's live value. */
 class SourceChip : public juce::Component,
                    public juce::SettableTooltipClient,
-                   private juce::Timer
+                   public Refreshable
 {
 public:
     SourceChip (ModdMuddProcessor& p, int source, const juce::String& text = {});
@@ -133,9 +146,9 @@ public:
     void mouseDrag (const juce::MouseEvent&) override;
     void mouseUp (const juce::MouseEvent&) override;
 
-private:
-    void timerCallback() override;
+    void refresh() override;
 
+private:
     ModdMuddProcessor& processor;
     int source;
     juce::String text;

@@ -186,7 +186,6 @@ GenericParamView::GenericParamView (ModdMuddProcessor& p, int slot) : processor 
 
     processor.addChangeListener (this);
     applyFilter();
-    startTimerHz (20);
 }
 
 GenericParamView::~GenericParamView()
@@ -234,7 +233,7 @@ juce::Component* GenericParamView::refreshComponentForRow (int row, bool, juce::
     return r;
 }
 
-void GenericParamView::timerCallback()
+void GenericParamView::refresh()
 {
     for (int i = 0; i < list.getNumRowsOnScreen() + 2; ++i)
         if (auto* r = dynamic_cast<Row*> (list.getComponentForRowNumber (list.getRowContainingPosition (0, 0) + i)))

@@ -8,8 +8,26 @@ const Palette& paletteFor (const juce::Component& c)
     if (auto* lnf = dynamic_cast<MuddLookAndFeel*> (&c.getLookAndFeel()))
         return lnf->getPalette();
 
-    static MuddLookAndFeel fallback;
-    return fallback.getPalette();
+    // Components can ask before they are added to the editor. Keep only a
+    // copy of the default colours: a LookAndFeel object in a static would be
+    // destroyed at process exit, after JUCE itself has shut down, which can
+    // crash the host on exit.
+    static const Palette fallback = [] { MuddLookAndFeel lnf; return lnf.getPalette(); }();
+    return fallback;
+}
+
+void refreshShowing (juce::Component& root)
+{
+    for (auto* child : root.getChildren())
+    {
+        if (! child->isVisible())
+            continue;
+
+        if (auto* r = dynamic_cast<Refreshable*> (child))
+            r->refresh();
+
+        refreshShowing (*child);
+    }
 }
 
 std::vector<juce::Rectangle<int>> flexRects (juce::Rectangle<int> area, const std::vector<std::pair<int, int>>& sizes, int gap)
@@ -273,10 +291,9 @@ SourceChip::SourceChip (ModdMuddProcessor& p, int src, const juce::String& t)
     setTitle (getSourceName (src) + " source");
     setWantsKeyboardFocus (true);
     setMouseCursor (juce::MouseCursor::DraggingHandCursor);
-    startTimerHz (30);
 }
 
-void SourceChip::timerCallback()
+void SourceChip::refresh()
 {
     const float v = processor.getEngine().sourceDisplay[(size_t) source].load (std::memory_order_relaxed);
     if (std::abs (v - shownValue) > 0.002f || processor.getArmedSource() == source)

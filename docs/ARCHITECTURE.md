@@ -161,6 +161,8 @@ The modulation panel snaps onto the hosted plug-in, so the two read as one windo
 - **Routing.** The matrix, with every connection in one list, sits behind the Routing button, so the main view is just the plug-in and the chain.
 - Panels adapt to the width. Rows shrink towards minimum sizes, labels drop out before controls do, and the matrix hides its offset, range and smoothing columns below 820 px.
 
+**One UI timer.** The editor runs a single 30 Hz timer. It updates the status line and calls `refresh()` on every visible `Refreshable` (source chips, waveform, history and meter displays, pads, the parameter list). Hidden panels do no work. This replaced about twenty per-widget timers. Besides the CPU saving, it fixed an intermittent crash on Linux: with many timers, events were still in flight when the editor closed, and the host's VST3 run loop could call ModdMudd's already-removed event handler. Running pluginval with editor tests reproduced this in about 1 run in 5, and it was gone in 28 runs after the change.
+
 `ModdMuddUISnapshot` checks the snapping: the window width and height against the hosted plug-in's window.
 
 ## Testing

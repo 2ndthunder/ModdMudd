@@ -204,7 +204,7 @@ ModdMuddEditor::ModdMuddEditor (ModdMuddProcessor& p)
     showSelectedSlot();
 
     setWantsKeyboardFocus (true);
-    startTimerHz (10);
+    startTimerHz (30);   // the only UI timer: see Refreshable
 }
 
 ModdMuddEditor::~ModdMuddEditor()
@@ -264,6 +264,8 @@ void ModdMuddEditor::timerCallback()
 
     if (status.getText() != text)
         status.setText (text, juce::dontSendNotification);
+
+    refreshShowing (*this);
 }
 
 void ModdMuddEditor::rebuildSlotButtons()

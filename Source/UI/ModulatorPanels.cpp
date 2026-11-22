@@ -32,7 +32,6 @@ XYPadComponent::XYPadComponent (ModdMuddProcessor& p, const juce::String& x, con
 {
     setWantsKeyboardFocus (true);
     setTitle ("XY pad");
-    startTimerHz (30);
 }
 
 juce::RangedAudioParameter* XYPadComponent::param (const juce::String& id) const
@@ -155,7 +154,6 @@ WaveView::WaveView (ModdMuddProcessor& p, int lfoIndex)
     Lfo::buildCustomTable (points, table.data());
     setTitle ("LFO " + juce::String (lfo + 1) + " waveform");
     setTooltip ("Custom shape: drag points, double-click to add or remove, Alt-drag to bend a segment");
-    startTimerHz (30);
 }
 
 bool WaveView::isCustom() const
@@ -340,11 +338,10 @@ LfoPanel::LfoPanel (ModdMuddProcessor& p, int i)
     setupLabel (shapeLabel, "Shape");
     setupLabel (retrigLabel, "Retrigger");
     setupLabel (divisionLabel, "Division");
-    startTimerHz (10);
-    timerCallback();
+    refresh();
 }
 
-void LfoPanel::timerCallback()
+void LfoPanel::refresh()
 {
     const bool synced = processor.getValueTreeState().getRawParameterValue (ids::lfo (index, "sync"))->load() >= 0.5f;
     division.setVisible (synced);
@@ -435,7 +432,6 @@ RandomPanel::RandomPanel (ModdMuddProcessor& p, int i)
     presetsButton.setButtonText ("Presets");
     presetsButton.onClick = [this] { showPresets(); };
 
-    startTimerHz (30);
 }
 
 void RandomPanel::applyPreset (std::initializer_list<std::pair<const char*, float>> values)
@@ -475,7 +471,7 @@ void RandomPanel::showPresets()
     });
 }
 
-void RandomPanel::timerCallback()
+void RandomPanel::refresh()
 {
     history.values[(size_t) history.write] = processor.getEngine().sourceDisplay[(size_t) (srcRandom0 + index)].load (std::memory_order_relaxed);
     history.write = (history.write + 1) % (int) history.values.size();
@@ -726,10 +722,9 @@ EnvPanel::EnvPanel (ModdMuddProcessor& p, int i)
     else
         source.setTooltip ("Sidechain needs the sidechain input enabled in your DAW");
 
-    startTimerHz (30);
 }
 
-void EnvPanel::timerCallback()
+void EnvPanel::refresh()
 {
     meter.values[(size_t) meter.write] = processor.getEngine().envLevelDisplay[(size_t) index].load (std::memory_order_relaxed);
     meter.write = (meter.write + 1) % (int) meter.values.size();

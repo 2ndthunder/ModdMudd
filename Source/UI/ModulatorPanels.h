@@ -7,7 +7,7 @@ namespace mm
 
 //==============================================================================
 /** A two-parameter pad (XY modulator, blender position). */
-class XYPadComponent : public juce::Component, private juce::Timer
+class XYPadComponent : public juce::Component, public Refreshable
 {
 public:
     XYPadComponent (ModdMuddProcessor& p, const juce::String& xId, const juce::String& yId,
@@ -21,9 +21,9 @@ public:
     void mouseDrag (const juce::MouseEvent&) override;
     void mouseUp (const juce::MouseEvent&) override;
     bool keyPressed (const juce::KeyPress&) override;
+    void refresh() override   { repaint(); }
 
 private:
-    void timerCallback() override   { repaint(); }
     void setFromPosition (juce::Point<float>);
     juce::RangedAudioParameter* param (const juce::String& id) const;
     juce::Point<float> toScreen (float x, float y) const;
@@ -36,7 +36,7 @@ private:
 };
 
 //==============================================================================
-class WaveView : public juce::Component, public juce::SettableTooltipClient, private juce::Timer
+class WaveView : public juce::Component, public juce::SettableTooltipClient, public Refreshable
 {
 public:
     WaveView (ModdMuddProcessor& p, int lfoIndex);
@@ -46,9 +46,9 @@ public:
     void mouseDrag (const juce::MouseEvent&) override;
     void mouseUp (const juce::MouseEvent&) override;
     void mouseDoubleClick (const juce::MouseEvent&) override;
+    void refresh() override   { repaint(); }
 
 private:
-    void timerCallback() override   { repaint(); }
     bool isCustom() const;
     juce::Point<float> pointToScreen (const WavePoint&) const;
     int hitPoint (juce::Point<float> pos) const;
@@ -64,15 +64,14 @@ private:
 };
 
 //==============================================================================
-class LfoPanel : public juce::Component, private juce::Timer
+class LfoPanel : public juce::Component, public Refreshable
 {
 public:
     LfoPanel (ModdMuddProcessor& p, int index);
     void resized() override;
+    void refresh() override;
 
 private:
-    void timerCallback() override;
-
     ModdMuddProcessor& processor;
     int index;
     Section section, controls;
@@ -84,11 +83,12 @@ private:
     juce::Label shapeLabel, retrigLabel, divisionLabel;
 };
 
-class RandomPanel : public juce::Component, private juce::Timer
+class RandomPanel : public juce::Component, public Refreshable
 {
 public:
     RandomPanel (ModdMuddProcessor& p, int index);
     void resized() override;
+    void refresh() override;
     void paint (juce::Graphics&) override {}
 
 private:
@@ -99,7 +99,6 @@ private:
         void paint (juce::Graphics&) override;
     };
 
-    void timerCallback() override;
     void showPresets();
     void applyPreset (std::initializer_list<std::pair<const char*, float>> values);
 
@@ -161,11 +160,12 @@ private:
     juce::Label info;
 };
 
-class EnvPanel : public juce::Component, private juce::Timer
+class EnvPanel : public juce::Component, public Refreshable
 {
 public:
     EnvPanel (ModdMuddProcessor& p, int index);
     void resized() override;
+    void refresh() override;
 
 private:
     struct Meter : juce::Component
@@ -174,8 +174,6 @@ private:
         int write = 0;
         void paint (juce::Graphics&) override;
     };
-
-    void timerCallback() override;
 
     ModdMuddProcessor& processor;
     int index;

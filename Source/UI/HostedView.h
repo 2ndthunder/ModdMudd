@@ -9,8 +9,8 @@ namespace mm
     plug-in (including ones whose own window can't be embedded), accepts
     dragged modulation sources and shows modulation live. */
 class GenericParamView : public juce::Component,
+                         public Refreshable,
                          private juce::ListBoxModel,
-                         private juce::Timer,
                          private juce::ChangeListener
 {
 public:
@@ -26,7 +26,9 @@ private:
     int getNumRows() override                      { return (int) visible.size(); }
     void paintListBoxItem (int, juce::Graphics&, int, int, bool) override {}
     juce::Component* refreshComponentForRow (int row, bool selected, juce::Component* existing) override;
-    void timerCallback() override;
+    void refresh() override;
+
+private:
     void changeListenerCallback (juce::ChangeBroadcaster*) override;
     void applyFilter();
 
