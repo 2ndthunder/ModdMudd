@@ -8,7 +8,7 @@ This file lists only what has actually been tested. Anything not listed is untes
 |---|---|---|---|
 | Ubuntu 24.04 x86_64 | GCC 13.3 | Builds; unit tests, hosting test and pluginval pass | 2026-11-22 |
 | macOS (GitHub Actions `macos-latest`, arm64 + x86_64 universal) | Apple Clang | Builds; unit tests, hosting test and pluginval (strictness 8) pass on the arm64 runner | 2026-11-22 |
-| Windows x64 (GitHub Actions `windows-latest`) | MSVC (runner's newest Visual Studio) | Set up in CI; results pending | — |
+| Windows x64 (GitHub Actions `windows-latest`) | MSVC (runner's newest Visual Studio) | Builds; unit tests, hosting test and pluginval (strictness 8) pass | 2026-11-22 |
 | Ubuntu 24.04 x86_64 (GitHub Actions) | GCC | Builds; unit tests, hosting test and pluginval (strictness 8) pass | 2026-11-22 |
 
 ## Validation
@@ -19,6 +19,7 @@ This file lists only what has actually been tested. Anything not listed is untes
 | pluginval 1.0.4, strictness 8 | ModdMudd Instrument, Linux | Pass |
 | pluginval 1.0.4, strictness 5 | both builds, Linux | Pass (includes opening the editor under Xvfb) |
 | pluginval 1.0.4, strictness 8 | both builds, macOS arm64 (CI) | Pass |
+| pluginval 1.0.4, strictness 8 | both builds, Windows x64 (CI) | Pass |
 
 The x86_64 half of the macOS universal binary is built but has not been run.
 
@@ -26,7 +27,7 @@ The x86_64 half of the macOS universal binary is built but has not been run.
 
 | Host | Hosted plug-ins | Result |
 |---|---|---|
-| JUCE 9.0.6 headless VST3 host (`ModdMuddHostTest`), Linux and macOS (CI) | MuddTestGain, MuddTestSynth (test plug-ins in this repo) | All 18 checks pass |
+| JUCE 9.0.6 headless VST3 host (`ModdMuddHostTest`), Linux, macOS and Windows (CI) | MuddTestGain, MuddTestSynth (test plug-ins in this repo) | All 18 checks pass |
 
 ## DAWs
 

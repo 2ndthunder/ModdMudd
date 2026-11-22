@@ -1,6 +1,6 @@
 # ModdMudd
 
-A universal modulation VST3 plugin for macOS and Linux. Insert ModdMudd in your DAW, load a third-party VST3 instrument or effect inside it, and modulate that plugin's parameters with LFOs, randomizers, macros, an XY pad, a four-state preset blender and an envelope follower.
+A universal modulation VST3 plugin for macOS, Linux and Windows. Insert ModdMudd in your DAW, load a third-party VST3 instrument or effect inside it, and modulate that plugin's parameters with LFOs, randomizers, macros, an XY pad, a four-state preset blender and an envelope follower.
 
 ModdMudd is an independent project, built with C++, JUCE 9 and CMake. It produces VST3 only: no AU, VST2, AAX or standalone builds.
 
@@ -8,7 +8,7 @@ ModdMudd is an independent project, built with C++, JUCE 9 and CMake. It produce
 
 ## Status
 
-Early development. Hosting, the modulation engine, the editor and state saving work, and are tested automatically on Linux (see below). Nothing has been tested in a DAW yet.
+Early development. Hosting, the modulation engine, the editor and state saving work, and are tested automatically on Linux, macOS and Windows. Nothing has been tested in a DAW yet.
 
 | | |
 |---|---|
