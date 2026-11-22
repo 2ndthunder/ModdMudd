@@ -1,0 +1,91 @@
+name: Build and test
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  BUILD_TYPE: Release
+  PLUGINVAL_VERSION: v1.0.4
+
+jobs:
+  linux:
+    name: Linux (x86_64)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build libasound2-dev libx11-dev libxext-dev libxrandr-dev \
+            libxinerama-dev libxcursor-dev libxi-dev libxcomposite-dev libxrender-dev \
+            libfreetype-dev libfontconfig1-dev libgl1-mesa-dev xvfb
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=$BUILD_TYPE
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Unit and hosting tests
+        run: ctest --test-dir build --output-on-failure
+
+      - name: pluginval
+        run: |
+          curl -sSL -o pluginval.zip https://github.com/Tracktion/pluginval/releases/download/$PLUGINVAL_VERSION/pluginval_Linux.zip
+          unzip -q pluginval.zip
+          for p in "build/ModdMuddFX_artefacts/$BUILD_TYPE/VST3/ModdMudd FX.vst3" \
+                   "build/ModdMuddInstrument_artefacts/$BUILD_TYPE/VST3/ModdMudd Instrument.vst3"; do
+            xvfb-run -a ./pluginval --strictness-level 8 --validate-in-process --timeout-ms 300000 "$p"
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ModdMudd-VST3-Linux-x86_64
+          path: |
+            build/ModdMuddFX_artefacts/${{ env.BUILD_TYPE }}/VST3/
+            build/ModdMuddInstrument_artefacts/${{ env.BUILD_TYPE }}/VST3/
+
+  macos:
+    name: macOS (universal)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Ninja
+        run: brew install ninja
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=$BUILD_TYPE -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Check architectures
+        run: lipo -info "build/ModdMuddFX_artefacts/$BUILD_TYPE/VST3/ModdMudd FX.vst3/Contents/MacOS/ModdMudd FX"
+
+      - name: Unit and hosting tests
+        run: ctest --test-dir build --output-on-failure
+
+      - name: pluginval
+        run: |
+          curl -sSL -o pluginval.zip https://github.com/Tracktion/pluginval/releases/download/$PLUGINVAL_VERSION/pluginval_macOS.zip
+          unzip -q pluginval.zip
+          for p in "build/ModdMuddFX_artefacts/$BUILD_TYPE/VST3/ModdMudd FX.vst3" \
+                   "build/ModdMuddInstrument_artefacts/$BUILD_TYPE/VST3/ModdMudd Instrument.vst3"; do
+            ./pluginval.app/Contents/MacOS/pluginval --strictness-level 8 --validate-in-process --timeout-ms 300000 "$p"
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ModdMudd-VST3-macOS-universal
+          path: |
+            build/ModdMuddFX_artefacts/${{ env.BUILD_TYPE }}/VST3/
+            build/ModdMuddInstrument_artefacts/${{ env.BUILD_TYPE }}/VST3/
