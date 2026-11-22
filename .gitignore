@@ -1,0 +1,22 @@
+# Build output
+build/
+build-*/
+cmake-build-*/
+out/
+
+# IDE
+.vscode/
+.idea/
+*.xcodeproj/
+*.xcworkspace/
+.DS_Store
+compile_commands.json
+.cache/
+
+# Local dependency checkouts
+JUCE/
+_deps/
+
+# pluginval output
+pluginval*/
+*.log
