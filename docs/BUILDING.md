@@ -45,10 +45,10 @@ For a single architecture, pass `-DCMAKE_OSX_ARCHITECTURES=arm64`. To distribute
 
 ## Windows (x64)
 
-Requires Visual Studio 2022 with the "Desktop development with C++" workload (MSVC and CMake), plus Git.
+Requires Visual Studio 2022 or newer with the "Desktop development with C++" workload (MSVC and CMake), plus Git. CMake picks the newest installed Visual Studio.
 
 ```bat
-cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+cmake -S . -B build -A x64
 cmake --build build --config Release
 ctest --test-dir build -C Release --output-on-failure
 ```
