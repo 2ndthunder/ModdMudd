@@ -89,3 +89,39 @@ jobs:
           path: |
             build/ModdMuddFX_artefacts/${{ env.BUILD_TYPE }}/VST3/
             build/ModdMuddInstrument_artefacts/${{ env.BUILD_TYPE }}/VST3/
+
+  windows:
+    name: Windows (x64)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+
+      # Visual Studio generator (MSVC, x64). It is multi-config, so the
+      # configuration is chosen at build and test time.
+      - name: Configure
+        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+
+      - name: Build
+        run: cmake --build build --config $BUILD_TYPE --parallel
+
+      - name: Unit and hosting tests
+        run: ctest --test-dir build -C $BUILD_TYPE --output-on-failure
+
+      - name: pluginval
+        run: |
+          curl -sSL -o pluginval.zip https://github.com/Tracktion/pluginval/releases/download/$PLUGINVAL_VERSION/pluginval_Windows.zip
+          unzip -q pluginval.zip
+          for p in "build/ModdMuddFX_artefacts/$BUILD_TYPE/VST3/ModdMudd FX.vst3" \
+                   "build/ModdMuddInstrument_artefacts/$BUILD_TYPE/VST3/ModdMudd Instrument.vst3"; do
+            ./pluginval.exe --strictness-level 8 --validate-in-process --timeout-ms 300000 "$p"
+          done
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ModdMudd-VST3-Windows-x64
+          path: |
+            build/ModdMuddFX_artefacts/${{ env.BUILD_TYPE }}/VST3/
+            build/ModdMuddInstrument_artefacts/${{ env.BUILD_TYPE }}/VST3/

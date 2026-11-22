@@ -8,6 +8,7 @@ This file lists only what has actually been tested. Anything not listed is untes
 |---|---|---|---|
 | Ubuntu 24.04 x86_64 | GCC 13.3 | Builds; unit tests, hosting test and pluginval pass | 2026-11-22 |
 | macOS (GitHub Actions `macos-latest`, arm64 + x86_64 universal) | Apple Clang | Builds; unit tests, hosting test and pluginval (strictness 8) pass on the arm64 runner | 2026-11-22 |
+| Windows x64 (GitHub Actions `windows-latest`) | MSVC (Visual Studio 2022) | Set up in CI; results pending | — |
 | Ubuntu 24.04 x86_64 (GitHub Actions) | GCC | Builds; unit tests, hosting test and pluginval (strictness 8) pass | 2026-11-22 |
 
 ## Validation
@@ -49,3 +50,4 @@ Worth checking in each DAW:
 
 Linux DAWs to try: Bitwig Studio, Reaper, Ardour, Tracktion Waveform, Carla.
 macOS: Reaper, Bitwig Studio, Ableton Live, Cubase, Studio One.
+Windows: Reaper, Bitwig Studio, Ableton Live, Cubase, Studio One, FL Studio. FL Studio is worth checking specifically: JUCE handles saved plug-in state differently in FL Studio, which affects ModdMudd reloading its hosted plug-ins.

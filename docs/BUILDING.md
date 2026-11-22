@@ -43,6 +43,23 @@ cp -r "build/ModdMuddInstrument_artefacts/Release/VST3/ModdMudd Instrument.vst3"
 
 For a single architecture, pass `-DCMAKE_OSX_ARCHITECTURES=arm64`. To distribute builds you will need to sign and notarize them; that isn't set up yet.
 
+## Windows (x64)
+
+Requires Visual Studio 2022 with the "Desktop development with C++" workload (MSVC and CMake), plus Git.
+
+```bat
+cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+cmake --build build --config Release
+ctest --test-dir build -C Release --output-on-failure
+```
+
+Install by copying both bundles into `C:\Program Files\Common Files\VST3`:
+
+- `build\ModdMuddFX_artefacts\Release\VST3\ModdMudd FX.vst3`
+- `build\ModdMuddInstrument_artefacts\Release\VST3\ModdMudd Instrument.vst3`
+
+ModdMudd keeps its plug-in list in `%APPDATA%\ModdMudd` and presets in `Documents\ModdMudd\Presets`.
+
 ## Options
 
 | Option | Default | |
