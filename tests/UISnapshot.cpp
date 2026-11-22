@@ -3,6 +3,7 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "../Source/Plugin/PluginProcessor.h"
+#include "../Source/UI/PluginEditor.h"
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter();
 
@@ -67,25 +68,56 @@ int main (int argc, char* argv[])
     }
 
     std::unique_ptr<juce::AudioProcessorEditor> editor (proc->createEditor());
-    // (modal loops are disabled in the plug-in build, so no message pumping here)
+
+    // Snapping check: with the plug-in's own window showing, ModdMudd's
+    // window should be exactly as wide as it (or the panel minimum), and
+    // exactly the panel taller.
+    std::function<juce::AudioProcessorEditor* (juce::Component&)> findHosted = [&] (juce::Component& c) -> juce::AudioProcessorEditor*
+    {
+        for (auto* child : c.getChildren())
+        {
+            if (auto* e = dynamic_cast<juce::AudioProcessorEditor*> (child))
+                return e;
+            if (auto* found = findHosted (*child))
+                return found;
+        }
+        return nullptr;
+    };
+
+    if (auto* hostedEditor = findHosted (*editor))
+    {
+        const int expectedW = juce::jmax (mm::ModdMuddEditor::minPanelWidth, hostedEditor->getWidth());
+        const int expectedH = hostedEditor->getHeight() + mm::ModdMuddEditor::panelHeight;
+        std::printf ("snap: plug-in window %dx%d at (%d,%d); ModdMudd window %dx%d (expected %dx%d) -> %s\n",
+                     hostedEditor->getWidth(), hostedEditor->getHeight(), hostedEditor->getX(), hostedEditor->getY(),
+                     editor->getWidth(), editor->getHeight(), expectedW, expectedH,
+                     (editor->getWidth() == expectedW && editor->getHeight() == expectedH) ? "OK" : "MISMATCH");
+    }
+    else
+    {
+        std::printf ("snap: no hosted plug-in window to check\n");
+    }
 
     if (auto* view = editor->findChildWithID ("view"))
         if (auto* b = dynamic_cast<juce::Button*> (view); b != nullptr && b->getButtonText() == "Parameters")
             b->onClick();   // triggerClick() is asynchronous
 
-    // (modal loops are disabled in the plug-in build, so no message pumping here)
-
     const char* names[] { "lfo1", "lfo2", "lfo3", "lfo4", "rnd1", "rnd2", "macros", "xy", "blend", "env1", "env2", "matrix" };
-    for (int t = 0; t < 12; ++t)
+
+    for (int width : { mm::ModdMuddEditor::minPanelWidth, 1200 })
     {
-        if (t != 0 && t != 4 && t != 6 && t != 7 && t != 8 && t != 9 && t != 11)
-            continue;
+        editor->setSize (width, 360 + mm::ModdMuddEditor::panelHeight);
 
-        if (auto* tab = dynamic_cast<juce::Button*> (editor->findChildWithID ("tab" + juce::String (t))))
-            tab->onClick();   // triggerClick() is asynchronous
+        for (int t = 0; t < 12; ++t)
+        {
+            if (t != 0 && t != 4 && t != 6 && t != 7 && t != 8 && t != 9 && t != 11)
+                continue;
 
-        // (modal loops are disabled in the plug-in build, so no message pumping here)
-        save (*editor, outDir.getChildFile (juce::String ("editor_") + names[t] + ".png"));
+            if (auto* tab = dynamic_cast<juce::Button*> (editor->findChildWithID ("tab" + juce::String (t))))
+                tab->onClick();
+
+            save (*editor, outDir.getChildFile (juce::String ("editor_") + juce::String (width) + "_" + names[t] + ".png"));
+        }
     }
 
     editor.reset();

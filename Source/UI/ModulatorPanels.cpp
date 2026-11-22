@@ -355,7 +355,7 @@ void LfoPanel::timerCallback()
 void LfoPanel::resized()
 {
     auto r = getLocalBounds();
-    auto left = r.removeFromLeft (r.getWidth() * 2 / 5);
+    auto left = r.removeFromLeft (juce::jlimit (170, 420, r.getWidth() * 2 / 5));
     section.setBounds (left);
     auto content = section.getContentBounds();
     chip.setBounds (content.removeFromBottom (28));
@@ -366,20 +366,15 @@ void LfoPanel::resized()
     controls.setBounds (r);
     auto c = controls.getContentBounds();
 
+    // Labels go first when space is short; the menus show their own values.
     auto topRow = c.removeFromTop (24);
-    shapeLabel.setBounds (topRow.removeFromLeft (44));
-    shape.setBounds (topRow.removeFromLeft (110));
-    topRow.removeFromLeft (8);
-    retrigLabel.setBounds (topRow.removeFromLeft (64));
-    retrig.setBounds (topRow.removeFromLeft (96));
-    topRow.removeFromLeft (8);
-    divisionLabel.setBounds (topRow.removeFromLeft (56));
-    division.setBounds (topRow.removeFromLeft (80));
+    const bool roomy = topRow.getWidth() >= 470;
+    layoutFlex (topRow, { { &shapeLabel, roomy ? 40 : 0, 0 }, { &shape, 110, 76 },
+                          { &retrigLabel, roomy ? 60 : 0, 0 }, { &retrig, 96, 70 },
+                          { &divisionLabel, roomy ? 52 : 0, 0 }, { &division, 80, 58 } });
 
     c.removeFromTop (6);
-    auto toggles = c.removeFromBottom (24);
-    sync.setBounds (toggles.removeFromLeft (80));
-    invert.setBounds (toggles.removeFromLeft (90));
+    layoutFlex (c.removeFromBottom (24), { { &sync, 80, 62 }, { &invert, 90, 70 } });
 
     layoutRow (c, { &rate, &phase, &depth, &offset, &fade });
 }
@@ -495,7 +490,7 @@ void RandomPanel::timerCallback()
 void RandomPanel::resized()
 {
     auto r = getLocalBounds();
-    auto left = r.removeFromLeft (r.getWidth() * 2 / 5);
+    auto left = r.removeFromLeft (juce::jlimit (170, 420, r.getWidth() * 2 / 5));
     section.setBounds (left);
     auto content = section.getContentBounds();
     chip.setBounds (content.removeFromBottom (28));
@@ -506,18 +501,11 @@ void RandomPanel::resized()
     controls.setBounds (r);
     auto c = controls.getContentBounds();
 
-    auto topRow = c.removeFromTop (24);
-    sync.setBounds (topRow.removeFromLeft (70));
-    division.setBounds (topRow.removeFromLeft (80));
-    topRow.removeFromLeft (8);
-    presetsButton.setBounds (topRow.removeFromRight (80));
-    topRow.removeFromRight (6);
-    seedButton.setBounds (topRow.removeFromRight (100));
+    layoutFlex (c.removeFromTop (24), { { &sync, 70, 60 }, { &division, 80, 58 }, { nullptr, 400, 0 },
+                                        { &seedButton, 100, 72 }, { &presetsButton, 80, 62 } });
 
     c.removeFromTop (6);
-    auto toggles = c.removeFromBottom (24);
-    smooth.setBounds (toggles.removeFromLeft (90));
-    independent.setBounds (toggles.removeFromLeft (130));
+    layoutFlex (c.removeFromBottom (24), { { &smooth, 90, 74 }, { &independent, 130, 104 } });
 
     layoutRow (c, { &rate, &probability, &glide, &depth, &offset });
 }
@@ -580,12 +568,7 @@ void XYPanel::resized()
     r.removeFromLeft (6);
     controls.setBounds (r);
     auto c = controls.getContentBounds();
-    auto chips = c.removeFromBottom (28);
-    chipX.setBounds (chips.removeFromLeft (110));
-    chips.removeFromLeft (6);
-    chipY.setBounds (chips.removeFromLeft (110));
-    chips.removeFromLeft (12);
-    bipolar.setBounds (chips.removeFromLeft (100));
+    layoutFlex (c.removeFromBottom (28), { { &chipX, 110, 74 }, { &chipY, 110, 74 }, { &bipolar, 100, 80 } });
     c.removeFromBottom (6);
     layoutRow (c, { &x, &y, &centreX, &centreY, &glide });
 }
@@ -680,13 +663,8 @@ void BlendPanel::resized()
     controls.setBounds (r);
     auto c = controls.getContentBounds();
 
-    auto buttons = c.removeFromTop (30);
-    for (auto& b : snapButtons)
-    {
-        b.setBounds (buttons.removeFromLeft (44));
-        buttons.removeFromLeft (6);
-    }
-    enabled.setBounds (buttons.removeFromLeft (110));
+    layoutFlex (c.removeFromTop (30), { { &snapButtons[0], 44, 30 }, { &snapButtons[1], 44, 30 }, { &snapButtons[2], 44, 30 },
+                                        { &snapButtons[3], 44, 30 }, { &enabled, 110, 86 } });
 
     c.removeFromTop (6);
     info.setBounds (c.removeFromBottom (36));
@@ -761,7 +739,7 @@ void EnvPanel::timerCallback()
 void EnvPanel::resized()
 {
     auto r = getLocalBounds();
-    auto left = r.removeFromLeft (r.getWidth() / 3);
+    auto left = r.removeFromLeft (juce::jlimit (150, 340, r.getWidth() / 3));
     section.setBounds (left);
     auto content = section.getContentBounds();
     chip.setBounds (content.removeFromBottom (28));
@@ -773,13 +751,9 @@ void EnvPanel::resized()
     auto c = controls.getContentBounds();
 
     auto topRow = c.removeFromTop (24);
-    sourceLabel.setBounds (topRow.removeFromLeft (64));
-    source.setBounds (topRow.removeFromLeft (100));
-    topRow.removeFromLeft (10);
-    detectorLabel.setBounds (topRow.removeFromLeft (60));
-    detector.setBounds (topRow.removeFromLeft (80));
-    topRow.removeFromLeft (10);
-    invert.setBounds (topRow.removeFromLeft (90));
+    const bool roomy = topRow.getWidth() >= 440;
+    layoutFlex (topRow, { { &sourceLabel, roomy ? 60 : 0, 0 }, { &source, 100, 76 },
+                          { &detectorLabel, roomy ? 56 : 0, 0 }, { &detector, 80, 62 }, { &invert, 90, 70 } });
 
     c.removeFromTop (6);
     layoutRow (c, { &attack, &release, &gain, &threshold, &sensitivity, &curve, &smooth, &depth });

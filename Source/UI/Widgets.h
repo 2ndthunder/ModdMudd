@@ -13,6 +13,22 @@ const Palette& paletteFor (const juce::Component& c);
 inline juce::String sourceDragId (int source)       { return "mmsrc:" + juce::String (source); }
 inline int sourceFromDragId (const juce::var& d)    { auto s = d.toString(); return s.startsWith ("mmsrc:") ? s.substring (6).getIntValue() : -1; }
 
+/** One item in a flexible row: preferred and minimum width in pixels. */
+struct FlexItem
+{
+    juce::Component* component = nullptr;
+    int preferred = 0;
+    int minimum = 0;
+};
+
+/** Splits a row into widths: preferred widths if they fit, otherwise each
+    item shrinks towards its minimum in proportion to how much it can give
+    up. Items given a width of zero end up hidden. Leftover space stays on
+    the right. */
+std::vector<juce::Rectangle<int>> flexRects (juce::Rectangle<int> area, const std::vector<std::pair<int, int>>& sizes, int gap = 6);
+
+void layoutFlex (juce::Rectangle<int> area, std::initializer_list<FlexItem> items, int gap = 6);
+
 /** Explains a failed connection in plain words. */
 juce::String describeAddResult (ModMatrix::AddResult r);
 

@@ -259,8 +259,7 @@ void GenericParamView::resized()
 
 void GenericParamView::paint (juce::Graphics& g)
 {
-    g.setColour (paletteFor (*this).panel);
-    g.fillRoundedRectangle (getLocalBounds().toFloat(), 4.0f);
+    g.fillAll (paletteFor (*this).panel);
 
     if (visible.empty())
     {
@@ -346,6 +345,32 @@ juce::Point<int> HostedView::getPreferredSize() const
     return { 0, 420 };
 }
 
+bool HostedView::isHostedResizable() const
+{
+    return editor != nullptr && editor->isResizable();
+}
+
+juce::Rectangle<int> HostedView::getHostedSizeLimits() const
+{
+    if (editor != nullptr)
+        if (auto* c = editor->getConstrainer())
+            return { c->getMinimumWidth(), c->getMinimumHeight(),
+                     juce::jmax (c->getMinimumWidth(), c->getMaximumWidth()),
+                     juce::jmax (c->getMinimumHeight(), c->getMaximumHeight()) };
+
+    return { 100, 100, 8000, 8000 };
+}
+
+void HostedView::resizeHosted (int width, int height)
+{
+    if (! isHostedResizable())
+        return;
+
+    const auto limits = getHostedSizeLimits();
+    editor->setSize (juce::jlimit (limits.getX(), limits.getWidth(), width),
+                     juce::jlimit (limits.getY(), limits.getHeight(), height));
+}
+
 void HostedView::componentMovedOrResized (juce::Component&, bool, bool wasResized)
 {
     if (wasResized && onPreferredSizeChanged)
@@ -369,8 +394,11 @@ void HostedView::resized()
 void HostedView::paint (juce::Graphics& g)
 {
     const auto& p = paletteFor (*this);
-    g.setColour (p.inset);
-    g.fillRoundedRectangle (getLocalBounds().toFloat(), 4.0f);
+
+    // Flush, square background: the plug-in's window sits edge to edge with
+    // ModdMudd's panel. It only shows where the plug-in is narrower than the
+    // panel.
+    g.fillAll (editor != nullptr ? p.background : p.inset);
 
     if (message.isNotEmpty())
     {

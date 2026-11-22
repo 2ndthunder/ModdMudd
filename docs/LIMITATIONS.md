@@ -19,6 +19,8 @@
 - **Hosted plug-in state calls** must run on the message thread (JUCE's VST3 host requires it). DAWs normally save and restore on that thread. If one doesn't, ModdMudd defers restoring, and saving relies on JUCE's message-manager lock.
 - **Up to 4 hosted plug-ins** in series. Parallel routing isn't implemented.
 
+- **Narrow plug-ins.** ModdMudd's panel needs at least 660 px. A plug-in whose window is narrower and can't be resized is centred above the panel, rather than matching its width exactly.
+
 ## Modulation
 
 - **Time resolution** is the sub-block size (32 samples by default), not per sample, because JUCE 9.0.6 has no sample-accurate path for hosted parameters. Smaller sub-blocks cost more CPU, and a few plug-ins handle very small blocks poorly. If a plug-in misbehaves, raise the setting.

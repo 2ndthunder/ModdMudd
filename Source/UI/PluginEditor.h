@@ -31,9 +31,10 @@ private:
     void showSelectedSlot();
     void updateSize();
     void selectTab (int index);
+    void layoutPanel (juce::Rectangle<int> panel);
 
     void showLoadMenu (int replaceIndex);
-    void showSlotMenu (int index);
+    void showSlotMenu();
     void showSettingsMenu();
     void showPresetMenu();
 
@@ -41,8 +42,7 @@ private:
     MuddLookAndFeel lnf;
     juce::TooltipWindow tooltips { this, 600 };
 
-    juce::OwnedArray<juce::TextButton> slotButtons;
-    juce::TextButton addButton { "+ Load" }, viewButton, presetButton { "Presets" }, settingsButton { "Settings" };
+    juce::TextButton slotButton, addButton { "+" }, viewButton, presetButton { "Presets" }, settingsButton { "Settings" };
     HostedView hosted;
 
     juce::OwnedArray<juce::TextButton> tabButtons;
@@ -55,8 +55,16 @@ private:
     bool preferNative = true;
     juce::String lastCatalogStatus;
     juce::StringArray slotUidsShown;
+    bool forwardingResize = false;   // resizing the hosted plug-in to follow the window
 
-    static constexpr int topBarHeight = 44, bottomHeight = 260, statusHeight = 24, gap = 6, minWidth = 1000;
+public:
+    // The modulation panel snaps under the hosted plug-in at the plug-in's
+    // own width. It needs at least minPanelWidth to stay usable.
+    static constexpr int stripHeight = 30, tabsHeight = 24, contentHeight = 190, statusHeight = 20, pad = 6;
+    static constexpr int panelHeight = stripHeight + pad + tabsHeight + 4 + contentHeight + pad + statusHeight;
+    static constexpr int minPanelWidth = 660, defaultWidth = 900, defaultCentreHeight = 440;
+
+private:
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ModdMuddEditor)
 };

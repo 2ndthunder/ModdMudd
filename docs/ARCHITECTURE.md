@@ -148,6 +148,19 @@ Hosted plug-ins must be created on the message thread. If the DAW restores state
 
 Presets are the same XML in `.mmpreset` files (`~/Documents/ModdMudd/Presets`).
 
+## Editor layout
+
+The modulation panel snaps onto the hosted plug-in, so the two read as one window:
+
+- The hosted plug-in's own window sits flush at the top, with no frame or top bar.
+- ModdMudd's panel sits directly underneath at the same width. Its header strip holds the plug-in menu (switch, load, replace, reorder, remove), the view toggle, presets and settings. Below that are the modulator tabs and a status line.
+- The window is exactly `plug-in height + panelHeight` tall and as wide as the plug-in. The exception is a plug-in narrower than the panel's minimum (660 px): it is centred above the panel instead.
+- If the plug-in's window can be resized, resizing ModdMudd's window resizes the plug-in (within its own limits), and the panel follows. If it can't, ModdMudd's window takes the plug-in's fixed size.
+- With ModdMudd's parameter list showing instead, the window resizes freely.
+- Panels adapt to the width. Rows shrink towards minimum sizes, labels drop out before controls do, and the matrix hides its offset, range and smoothing columns below 820 px.
+
+`ModdMuddUISnapshot` checks the snapping: the window width and height against the hosted plug-in's window.
+
 ## Testing
 
 - `ModdMuddTests`: engine unit tests (LFO shapes, sync and fade, custom tables, randomizer determinism and limits, envelope timing and mapping, matrix cycle detection and serialisation, polarity and range maths, blender interpolation, RtSwap).

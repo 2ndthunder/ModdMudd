@@ -94,6 +94,36 @@ void chooseDestination (ModdMuddProcessor& p, juce::Component& target, const juc
 }
 
 //==============================================================================
+/** Column layout shared by the rows and the headings. Offset, range and
+    smoothing give way first when the panel is narrow (they stay editable
+    when there is room). */
+enum MatrixColumn { colEnabled, colName, colDepth, colOffset, colPolarity, colMin, colMax, colSmooth, colRemove, numColumns };
+
+static std::vector<juce::Rectangle<int>> matrixColumns (juce::Rectangle<int> row)
+{
+    // Below this width the optional columns are dropped entirely rather than
+    // squeezed into controls too small to use. They stay editable in a wider
+    // window.
+    const bool wide = row.getWidth() >= 820;
+    const int optional = wide ? 1 : 0;
+
+    auto rects = flexRects (row, { { 36, 36 }, { 260, 110 }, { 130, 84 }, { 110 * optional, 70 * optional }, { 86, 70 },
+                                   { 100 * optional, 70 * optional }, { 100 * optional, 70 * optional },
+                                   { 120 * optional, 80 * optional }, { 26, 26 } }, 4);
+
+    // Give any spare width to the name column.
+    const int spare = row.getRight() - rects.back().getRight();
+    if (spare > 0)
+    {
+        rects[colName].setWidth (rects[colName].getWidth() + spare);
+        for (size_t i = colName + 1; i < rects.size(); ++i)
+            rects[i].translate (spare, 0);
+    }
+
+    return rects;
+}
+
+//==============================================================================
 class MatrixPanel::Row : public juce::Component
 {
 public:
@@ -181,19 +211,14 @@ public:
 
     void resized() override
     {
-        auto r = getLocalBounds().reduced (2, 3);
-        enabled.setBounds (r.removeFromLeft (40));
-        remove.setBounds (r.removeFromRight (26));
-        r.removeFromRight (4);
-        smoothing.setBounds (r.removeFromRight (120));
-        rangeMax.setBounds (r.removeFromRight (100));
-        rangeMin.setBounds (r.removeFromRight (100));
-        r.removeFromRight (4);
-        polarity.setBounds (r.removeFromRight (86));
-        r.removeFromRight (4);
-        offset.setBounds (r.removeFromRight (110));
-        depth.setBounds (r.removeFromRight (130));
-        name.setBounds (r);
+        const auto cols = matrixColumns (getLocalBounds().reduced (2, 3));
+        juce::Component* order[] { &enabled, &name, &depth, &offset, &polarity, &rangeMin, &rangeMax, &smoothing, &remove };
+
+        for (int i = 0; i < numColumns; ++i)
+        {
+            order[i]->setBounds (cols[(size_t) i]);
+            order[i]->setVisible (cols[(size_t) i].getWidth() > 0);
+        }
     }
 
     void paint (juce::Graphics& g) override
@@ -307,21 +332,17 @@ void MatrixPanel::paint (juce::Graphics& g)
     g.setColour (p.panel);
     g.fillRoundedRectangle (getLocalBounds().toFloat(), 4.0f);
 
-    // Column headings, matching Row::resized()
-    auto h = list.getBounds().withHeight (16).translated (0, -17).reduced (2, 0);
+    // Column headings, using the same layout as the rows.
+    const auto row = list.getBounds().withHeight (16).translated (0, -17).reduced (2, 0)
+                         .withTrimmedRight (list.getVerticalScrollBar().isVisible() ? list.getVerticalScrollBar().getWidth() : 0);
+    const auto cols = matrixColumns (row);
+    const char* headings[] { "", "SOURCE  >  DESTINATION", "DEPTH", "OFFSET", "POLARITY", "MIN", "MAX", "SMOOTH", "" };
+
     g.setColour (p.textDim);
     g.setFont (MuddLookAndFeel::font (11.0f, true));
-    h.removeFromLeft (40);
-    h.removeFromRight (30);
-    g.drawText ("SMOOTH", h.removeFromRight (120), juce::Justification::centredLeft);
-    g.drawText ("MAX", h.removeFromRight (100), juce::Justification::centredLeft);
-    g.drawText ("MIN", h.removeFromRight (100), juce::Justification::centredLeft);
-    h.removeFromRight (4);
-    g.drawText ("POLARITY", h.removeFromRight (86), juce::Justification::centredLeft);
-    h.removeFromRight (4);
-    g.drawText ("OFFSET", h.removeFromRight (110), juce::Justification::centredLeft);
-    g.drawText ("DEPTH", h.removeFromRight (130), juce::Justification::centredLeft);
-    g.drawText ("SOURCE  >  DESTINATION", h, juce::Justification::centredLeft);
+    for (int i = 0; i < numColumns; ++i)
+        if (cols[(size_t) i].getWidth() > 0)
+            g.drawText (headings[i], cols[(size_t) i], juce::Justification::centredLeft);
 
     if (connectionIds.empty())
     {
@@ -335,15 +356,8 @@ void MatrixPanel::paint (juce::Graphics& g)
 void MatrixPanel::resized()
 {
     auto r = getLocalBounds().reduced (6);
-    auto top = r.removeFromTop (26);
-    sourceBox.setBounds (top.removeFromLeft (120));
-    top.removeFromLeft (6);
-    search.setBounds (top.removeFromLeft (160));
-    top.removeFromLeft (6);
-    destButton.setBounds (top.removeFromLeft (260));
-    top.removeFromLeft (6);
-    addButton.setBounds (top.removeFromLeft (60));
-    countLabel.setBounds (top);
+    layoutFlex (r.removeFromTop (26), { { &sourceBox, 120, 86 }, { &search, 160, 90 }, { &destButton, 260, 130 },
+                                        { &addButton, 60, 46 }, { &countLabel, 400, 0 } });
     r.removeFromTop (22);   // room for column headings
     list.setBounds (r);
 }

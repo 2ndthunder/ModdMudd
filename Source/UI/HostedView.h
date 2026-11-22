@@ -56,6 +56,15 @@ public:
     bool isShowingNative() const noexcept   { return editor != nullptr; }
     juce::Point<int> getPreferredSize() const;
 
+    /** True if the hosted plug-in's own window can be resized. */
+    bool isHostedResizable() const;
+
+    /** Min (x, y) and max (width, height) sizes the plug-in's window accepts. */
+    juce::Rectangle<int> getHostedSizeLimits() const;
+
+    /** Asks the plug-in's window to take this size, within its limits. */
+    void resizeHosted (int width, int height);
+
     std::function<void()> onPreferredSizeChanged;
     std::function<void()> onLoadRequested;
 

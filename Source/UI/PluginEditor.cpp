@@ -9,10 +9,14 @@ ModdMuddEditor::ModdMuddEditor (ModdMuddProcessor& p)
     lnf.setTheme (processor.getThemeIndex());
     setLookAndFeel (&lnf);
 
-    for (auto* b : { &addButton, &viewButton, &presetButton, &settingsButton })
+    for (auto* b : { &slotButton, &addButton, &viewButton, &presetButton, &settingsButton })
         addAndMakeVisible (b);
 
-    addButton.setTooltip ("Load a VST3 plug-in into ModdMudd");
+    slotButton.setTooltip ("The hosted plug-in. Click to switch, load, replace or remove plug-ins.");
+    slotButton.setTitle ("Hosted plug-in");
+    slotButton.onClick = [this] { showSlotMenu(); };
+    addButton.setTooltip ("Load another VST3 plug-in into ModdMudd");
+    addButton.setTitle ("Load plug-in");
     addButton.onClick = [this] { showLoadMenu (-1); };
     viewButton.setComponentID ("view");
     viewButton.setTooltip ("Switch between the plug-in's own window and ModdMudd's parameter list");
@@ -39,7 +43,7 @@ ModdMuddEditor::ModdMuddEditor (ModdMuddProcessor& p)
 
     for (int i = 0; i < kNumLfos; ++i)    addTab ("LFO " + juce::String (i + 1), new LfoPanel (processor, i));
     for (int i = 0; i < kNumRandoms; ++i) addTab ("RND " + juce::String (i + 1), new RandomPanel (processor, i));
-    addTab ("MACROS", new MacroPanel (processor));
+    addTab ("MACRO", new MacroPanel (processor));
     addTab ("XY", new XYPanel (processor));
     addTab ("BLEND", new BlendPanel (processor));
     for (int i = 0; i < kNumEnvs; ++i)    addTab ("ENV " + juce::String (i + 1), new EnvPanel (processor, i));
@@ -56,7 +60,6 @@ ModdMuddEditor::ModdMuddEditor (ModdMuddProcessor& p)
     rebuildSlotButtons();
     showSelectedSlot();
 
-    setResizeLimits (minWidth, 600, 4000, 3000);
     setWantsKeyboardFocus (true);
     startTimerHz (10);
 }
@@ -119,40 +122,27 @@ void ModdMuddEditor::timerCallback()
 
 void ModdMuddEditor::rebuildSlotButtons()
 {
-    for (auto* b : slotButtons)
-        removeChildComponent (b);
-    slotButtons.clear();
-
     const auto& slots = processor.getSlots();
     slotUidsShown.clear();
     for (auto& s : slots)
         slotUidsShown.add (s->getUid() + (s->isMissing() ? "?" : ""));
     selectedSlot = juce::jlimit (0, juce::jmax (0, (int) slots.size() - 1), selectedSlot);
 
-    for (int i = 0; i < (int) slots.size(); ++i)
+    if (slots.empty())
     {
-        auto& slot = *slots[(size_t) i];
-        auto* b = slotButtons.add (new juce::TextButton (juce::String (i + 1) + "  " + slot.getDisplayName()
-                                                         + (slot.isMissing() ? " (missing)" : "")));
-        b->setToggleState (i == selectedSlot, juce::dontSendNotification);
-        b->setTooltip ("Click to show, right-click for options");
-        b->onClick = [this, i]
-        {
-            if (juce::ModifierKeys::currentModifiers.isPopupMenu())
-            {
-                showSlotMenu (i);
-                return;
-            }
-
-            selectedSlot = i;
-            rebuildSlotButtons();
-            showSelectedSlot();
-        };
-        addAndMakeVisible (b);
+        slotButton.setButtonText ("No plug-in loaded");
+    }
+    else
+    {
+        auto& slot = *slots[(size_t) selectedSlot];
+        juce::String text;
+        if (slots.size() > 1)
+            text << (selectedSlot + 1) << "/" << (int) slots.size() << "  ";
+        text << slot.getDisplayName() << (slot.isMissing() ? " (missing)" : "");
+        slotButton.setButtonText (text);
     }
 
     addButton.setEnabled ((int) slots.size() < kMaxHostedPlugins);
-    resized();
 }
 
 void ModdMuddEditor::showSelectedSlot()
@@ -165,20 +155,31 @@ void ModdMuddEditor::showSelectedSlot()
 
 void ModdMuddEditor::updateSize()
 {
-    const auto pref = hosted.getPreferredSize();
-    const bool native = hosted.isShowingNative();
+    if (forwardingResize)
+        return;
 
-    setResizable (! native, ! native);
-
-    if (native)
+    if (hosted.isShowingNative())
     {
-        const int w = juce::jmax (minWidth, pref.x + 2 * gap);
-        const int h = topBarHeight + pref.y + gap + bottomHeight + statusHeight + gap;
-        setSize (w, h);
+        // Snap to the plug-in: same width (unless it's narrower than the
+        // panel can go), plug-in on top, panel underneath.
+        const auto pref = hosted.getPreferredSize();
+        const bool canResize = hosted.isHostedResizable();
+        const auto limits = hosted.getHostedSizeLimits();
+
+        setResizable (canResize, false);
+        if (canResize)
+            setResizeLimits (juce::jmax (minPanelWidth, limits.getX()), limits.getY() + panelHeight,
+                             juce::jmax (minPanelWidth, limits.getWidth()), limits.getHeight() + panelHeight);
+
+        setSize (juce::jmax (minPanelWidth, pref.x), pref.y + panelHeight);
     }
-    else if (getWidth() < minWidth || getHeight() < 600)
+    else
     {
-        setSize (juce::jmax (getWidth(), 1100), juce::jmax (getHeight(), topBarHeight + pref.y + gap + bottomHeight + statusHeight + gap));
+        setResizable (true, true);
+        setResizeLimits (minPanelWidth, 320 + panelHeight, 4000, 3000);
+
+        if (getWidth() < minPanelWidth || getHeight() < 320 + panelHeight)
+            setSize (defaultWidth, defaultCentreHeight + panelHeight);
     }
 
     resized();
@@ -200,18 +201,22 @@ void ModdMuddEditor::paint (juce::Graphics& g)
     const auto& p = lnf.getPalette();
     g.fillAll (p.background);
 
-    auto bar = getLocalBounds().removeFromTop (topBarHeight);
-    g.setColour (p.panelHeader);
-    g.fillRect (bar);
-    g.setColour (p.outline);
-    g.drawHorizontalLine (topBarHeight - 1, 0.0f, (float) getWidth());
+    auto panel = getLocalBounds().removeFromBottom (panelHeight);
 
-    // Wordmark
-    auto logo = bar.reduced (12, 0).removeFromLeft (150);
-    g.setFont (MuddLookAndFeel::font (21.0f, true));
-    g.setColour (p.text);
+    // Header strip of the panel
+    auto strip = panel.removeFromTop (stripHeight);
+    g.setColour (p.panelHeader);
+    g.fillRect (strip);
+
+    // The seam where the panel snaps onto the plug-in
+    g.setColour (p.value);
+    g.fillRect (strip.removeFromTop (2));
+
+    auto logo = strip.reduced (10, 0).removeFromLeft (110);
+    g.setFont (MuddLookAndFeel::font (15.0f, true));
     const auto modd = juce::String ("MODD");
     const int moddW = juce::GlyphArrangement::getStringWidthInt (g.getCurrentFont(), modd);
+    g.setColour (p.text);
     g.drawText (modd, logo, juce::Justification::centredLeft);
     g.setColour (p.value);
     g.drawText ("MUDD", logo.withTrimmedLeft (moddW + 1), juce::Justification::centredLeft);
@@ -219,48 +224,67 @@ void ModdMuddEditor::paint (juce::Graphics& g)
     if constexpr (kIsInstrumentBuild)
     {
         g.setColour (p.textDim);
-        g.setFont (MuddLookAndFeel::font (10.0f, true));
-        g.drawText ("INSTRUMENT", logo.withTrimmedLeft (moddW * 2 + 6), juce::Justification::centredLeft);
+        g.setFont (MuddLookAndFeel::font (9.0f, true));
+        g.drawText ("INST", logo.withTrimmedLeft (moddW * 2 + 5), juce::Justification::centredLeft);
     }
 
     g.setColour (p.panelHeader);
     g.fillRect (getLocalBounds().removeFromBottom (statusHeight));
 }
 
-void ModdMuddEditor::resized()
+void ModdMuddEditor::layoutPanel (juce::Rectangle<int> panel)
 {
-    auto r = getLocalBounds();
+    auto strip = panel.removeFromTop (stripHeight).withTrimmedTop (2).reduced (6, 3);
+    strip.removeFromLeft (kIsInstrumentBuild ? 130 : 104);
 
-    auto bar = r.removeFromTop (topBarHeight).reduced (8, 8);
-    bar.removeFromLeft (kIsInstrumentBuild ? 230 : 160);
-    settingsButton.setBounds (bar.removeFromRight (80));
-    bar.removeFromRight (6);
-    presetButton.setBounds (bar.removeFromRight (80));
-    bar.removeFromRight (6);
-    viewButton.setBounds (bar.removeFromRight (96));
-    bar.removeFromRight (16);
+    layoutFlex (strip, { { &slotButton, 260, 110 }, { &addButton, 28, 28 }, { nullptr, 4000, 0 } }, 4);
+    auto right = strip.removeFromRight (juce::jmin (strip.getWidth() / 2, 250));
+    layoutFlex (right, { { &viewButton, 86, 66 }, { &presetButton, 74, 58 }, { &settingsButton, 74, 58 } }, 4);
 
-    for (auto* b : slotButtons)
+    // Keep the plug-in button and "+" clear of the right-hand buttons.
+    const int maxLeft = right.getX() - 8;
+    if (slotButton.getRight() > maxLeft - 32)
     {
-        b->setBounds (bar.removeFromLeft (juce::jmin (180, juce::jmax (100, bar.getWidth() / 5))));
-        bar.removeFromLeft (4);
+        slotButton.setBounds (slotButton.getBounds().withRight (juce::jmax (slotButton.getX() + 60, maxLeft - 32)));
+        addButton.setBounds (addButton.getBounds().withX (slotButton.getRight() + 4));
     }
-    addButton.setBounds (bar.removeFromLeft (80));
 
-    status.setBounds (r.removeFromBottom (statusHeight).reduced (10, 0));
+    status.setBounds (panel.removeFromBottom (statusHeight).reduced (10, 0));
 
-    auto bottom = r.removeFromBottom (bottomHeight).reduced (gap, 0);
-    auto tabs = bottom.removeFromTop (26);
+    auto content = panel.reduced (pad, 0);
+    content.removeFromTop (pad);
+    auto tabs = content.removeFromTop (tabsHeight);
     const int tabW = juce::jmin (90, tabs.getWidth() / juce::jmax (1, tabButtons.size()));
     for (auto* b : tabButtons)
         b->setBounds (tabs.removeFromLeft (tabW).reduced (1, 0));
 
-    bottom.removeFromTop (4);
-    bottom.removeFromBottom (gap);
-    for (auto* panel : panels)
-        panel->setBounds (bottom);
+    content.removeFromTop (4);
+    content.removeFromBottom (pad);
+    for (auto* panelComponent : panels)
+        panelComponent->setBounds (content);
+}
 
-    hosted.setBounds (r.reduced (gap, gap));
+void ModdMuddEditor::resized()
+{
+    auto r = getLocalBounds();
+    layoutPanel (r.removeFromBottom (panelHeight));
+    hosted.setBounds (r);
+
+    // A resizable plug-in follows the window; the window then snaps back to
+    // whatever size the plug-in actually accepted.
+    if (hosted.isShowingNative() && hosted.isHostedResizable() && ! forwardingResize)
+    {
+        const auto pref = hosted.getPreferredSize();
+        if (pref.x != r.getWidth() || pref.y != r.getHeight())
+        {
+            forwardingResize = true;
+            hosted.resizeHosted (r.getWidth(), r.getHeight());
+            forwardingResize = false;
+
+            juce::Component::SafePointer<ModdMuddEditor> safe (this);
+            juce::MessageManager::callAsync ([safe] { if (safe != nullptr) safe->updateSize(); });
+        }
+    }
 }
 
 bool ModdMuddEditor::keyPressed (const juce::KeyPress& k)
@@ -302,7 +326,7 @@ void ModdMuddEditor::showLoadMenu (int replaceIndex)
     menu.addItem (10002, "Rescan all plug-ins", ! catalog.isScanning());
 
     juce::Component::SafePointer<ModdMuddEditor> safe (this);
-    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&addButton),
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&slotButton),
                         [safe, plugins, replaceIndex] (int r)
                         {
                             if (safe == nullptr) return;
@@ -325,27 +349,49 @@ void ModdMuddEditor::showLoadMenu (int replaceIndex)
                         });
 }
 
-void ModdMuddEditor::showSlotMenu (int index)
+void ModdMuddEditor::showSlotMenu()
 {
+    const auto& slots = processor.getSlots();
+    const int count = (int) slots.size();
+    const int index = selectedSlot;
+
     juce::PopupMenu m;
-    m.addItem (1, "Replace...");
-    m.addItem (2, "Move left", index > 0);
-    m.addItem (3, "Move right", index < (int) processor.getSlots().size() - 1);
-    m.addSeparator();
-    m.addItem (4, "Remove");
+    for (int i = 0; i < count; ++i)
+        m.addItem (1 + i, juce::String (i + 1) + "  " + slots[(size_t) i]->getDisplayName()
+                              + (slots[(size_t) i]->isMissing() ? " (missing)" : ""), true, i == index);
+
+    if (count > 0)
+        m.addSeparator();
+
+    m.addItem (100, count == 0 ? "Load a plug-in..." : "Load another plug-in...", count < kMaxHostedPlugins);
+
+    if (count > 0)
+    {
+        const auto name = slots[(size_t) index]->getDisplayName();
+        m.addItem (101, "Replace " + name + "...");
+        m.addItem (102, "Move " + name + " earlier", index > 0);
+        m.addItem (103, "Move " + name + " later", index < count - 1);
+        m.addSeparator();
+        m.addItem (104, "Remove " + name);
+    }
 
     juce::Component::SafePointer<ModdMuddEditor> safe (this);
-    m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (slotButtons[index]), [safe, index] (int r)
+    m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&slotButton), [safe, index] (int r)
     {
-        if (safe == nullptr) return;
+        if (safe == nullptr || r == 0) return;
         auto& proc = safe->processor;
 
-        switch (r)
+        if (r >= 1 && r < 100)
         {
-            case 1: safe->showLoadMenu (index); break;
-            case 2: proc.moveSlot (index, index - 1); safe->selectedSlot = index - 1; break;
-            case 3: proc.moveSlot (index, index + 1); safe->selectedSlot = index + 1; break;
-            case 4: proc.removePlugin (index); safe->selectedSlot = juce::jmax (0, index - 1); break;
+            safe->selectedSlot = r - 1;
+        }
+        else switch (r)
+        {
+            case 100: safe->showLoadMenu (-1); return;
+            case 101: safe->showLoadMenu (index); return;
+            case 102: proc.moveSlot (index, index - 1); safe->selectedSlot = index - 1; break;
+            case 103: proc.moveSlot (index, index + 1); safe->selectedSlot = index + 1; break;
+            case 104: proc.removePlugin (index); safe->selectedSlot = juce::jmax (0, index - 1); break;
             default: return;
         }
 

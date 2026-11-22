@@ -12,6 +12,60 @@ const Palette& paletteFor (const juce::Component& c)
     return fallback.getPalette();
 }
 
+std::vector<juce::Rectangle<int>> flexRects (juce::Rectangle<int> area, const std::vector<std::pair<int, int>>& sizes, int gap)
+{
+    std::vector<juce::Rectangle<int>> result;
+    if (sizes.empty())
+        return result;
+
+    int totalPref = 0, totalMin = 0;
+    for (auto [pref, min] : sizes)
+    {
+        totalPref += pref;
+        totalMin += juce::jmin (min, pref);
+    }
+
+    const int available = juce::jmax (0, area.getWidth() - gap * ((int) sizes.size() - 1));
+
+    for (auto [pref, min] : sizes)
+    {
+        min = juce::jmin (min, pref);
+        int w;
+
+        if (available >= totalPref)
+            w = pref;
+        else if (available >= totalMin && totalPref > totalMin)
+            w = pref - (int) std::lround ((double) (pref - min) * (totalPref - available) / (double) (totalPref - totalMin));
+        else
+            w = totalMin > 0 ? (int) ((double) min * available / totalMin) : 0;
+
+        result.push_back (area.removeFromLeft (juce::jmax (0, w)));
+        area.removeFromLeft (gap);
+    }
+
+    return result;
+}
+
+void layoutFlex (juce::Rectangle<int> area, std::initializer_list<FlexItem> items, int gap)
+{
+    std::vector<std::pair<int, int>> sizes;
+    for (auto& i : items)
+        sizes.emplace_back (i.preferred, i.minimum);
+
+    const auto rects = flexRects (area, sizes, gap);
+    size_t k = 0;
+
+    for (auto& i : items)
+    {
+        if (i.component != nullptr)
+        {
+            const auto rect = rects[k];
+            i.component->setBounds (rect.getWidth() >= 8 ? rect : rect.withWidth (0));
+        }
+        ++k;
+    }
+}
+
 juce::String describeAddResult (ModMatrix::AddResult r)
 {
     switch (r)
@@ -81,12 +135,15 @@ Knob::~Knob()
     processor.removeChangeListener (this);
 }
 
+static constexpr int knobLabelHeight = 16;
+
 void Knob::resized()
 {
+    // Knob and label stay together, centred in whatever space the panel gives.
     auto r = getLocalBounds();
-    r.removeFromBottom (16);
-    const int size = juce::jmin (r.getWidth(), r.getHeight(), 76);
-    slider.setBounds (r.withSizeKeepingCentre (size, size).withY (r.getBottom() - size));
+    const int size = juce::jmax (16, juce::jmin (r.getWidth(), r.getHeight() - knobLabelHeight, 76));
+    const int top = r.getY() + (r.getHeight() - size - knobLabelHeight) / 2;
+    slider.setBounds (r.getCentreX() - size / 2, top, size, size);
 }
 
 void Knob::paint (juce::Graphics& g)
@@ -94,7 +151,8 @@ void Knob::paint (juce::Graphics& g)
     const auto& p = paletteFor (*this);
     g.setColour (p.textDim);
     g.setFont (MuddLookAndFeel::font (11.5f));
-    g.drawFittedText (label, getLocalBounds().removeFromBottom (16), juce::Justification::centred, 1);
+    g.drawFittedText (label, getLocalBounds().withY (slider.getBottom()).withHeight (knobLabelHeight),
+                      juce::Justification::centred, 1);
 }
 
 void Knob::paintOverChildren (juce::Graphics& g)

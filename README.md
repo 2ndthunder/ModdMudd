@@ -19,6 +19,7 @@ Early development. Hosting, the modulation engine, the editor and state saving w
 
 ## Features
 
+- The modulation panel snaps under the hosted plug-in at the plug-in's own width, so the two read as one window. Resizable plug-ins follow the window.
 - Hosts up to four VST3 plug-ins in series (an instrument plus effects in the Instrument build).
 - **Modulators:** 4 LFOs (including custom drawn shapes), 2 randomizers, 8 macros, an XY pad, 2 envelope followers, and a four-state preset blender.
 - **Cross-modulation**, where modulators drive each other. Loops are refused.
