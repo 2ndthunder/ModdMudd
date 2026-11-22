@@ -4,9 +4,31 @@ A universal modulation VST3 plugin for macOS and Linux. Insert ModdMudd in your 
 
 ModdMudd is an independent project, built with C++, JUCE 9 and CMake. It produces VST3 only: no AU, VST2, AAX or standalone builds.
 
+![ModdMudd editor](docs/images/editor-lfo.png)
+
 ## Status
 
-Early development. See `docs/` for the architecture, build instructions, known limitations and the list of DAWs and plugins that have actually been tested.
+Early development. Hosting, the modulation engine, the editor and state saving work, and are tested automatically on Linux (see below). Nothing has been tested in a DAW yet.
+
+| | |
+|---|---|
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | how it works and why |
+| [docs/BUILDING.md](docs/BUILDING.md) | build on Linux and macOS |
+| [docs/LIMITATIONS.md](docs/LIMITATIONS.md) | known limitations |
+| [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) | what has actually been tested |
+
+## Features
+
+- Hosts up to four VST3 plug-ins in series (an instrument plus effects in the Instrument build).
+- **Modulators:** 4 LFOs (including custom drawn shapes), 2 randomizers, 8 macros, an XY pad, 2 envelope followers, and a four-state preset blender.
+- **Cross-modulation**, where modulators drive each other. Loops are refused.
+- **Assigning modulation:**
+  - drag a source onto a parameter
+  - click a source, then move a control in the hosted plug-in's own window
+  - use the matrix
+- Modulation resolution is per 32-sample sub-block by default, rather than per host buffer.
+- 256 DAW-automatable slots, named after the hosted parameters. MIDI learn on every ModdMudd control.
+- Sessions and presets find hosted plug-ins by VST3 class ID, so they move between machines. Plug-ins that aren't installed are kept, not lost.
 
 ## Builds
 
