@@ -67,7 +67,12 @@ int main (int argc, char* argv[])
         proc->processBlock (buffer, midi);
     }
 
+    // Put every modulator in the chain so each editor can be rendered.
+    for (int m = 0; m < mm::kNumModules; ++m)
+        proc->addModule (m);
+
     std::unique_ptr<juce::AudioProcessorEditor> editor (proc->createEditor());
+    auto* moddEditor = dynamic_cast<mm::ModdMuddEditor*> (editor.get());
 
     // Snapping check: with the plug-in's own window showing, ModdMudd's
     // window should be exactly as wide as it (or the panel minimum), and
@@ -102,23 +107,37 @@ int main (int argc, char* argv[])
         if (auto* b = dynamic_cast<juce::Button*> (view); b != nullptr && b->getButtonText() == "Parameters")
             b->onClick();   // triggerClick() is asynchronous
 
-    const char* names[] { "lfo1", "lfo2", "lfo3", "lfo4", "rnd1", "rnd2", "macros", "xy", "blend", "env1", "env2", "matrix" };
+    struct Shot { int module; const char* name; };
+    const Shot shots[] { { mm::modLfo0, "lfo1" }, { mm::modRandom0, "rnd1" }, { mm::modMacros, "macros" }, { mm::modXy, "xy" },
+                         { mm::modBlend, "blend" }, { mm::modEnv0, "env1" }, { -1, "routing" } };
 
     for (int width : { mm::ModdMuddEditor::minPanelWidth, 1200 })
     {
         editor->setSize (width, 360 + mm::ModdMuddEditor::panelHeight);
 
-        for (int t = 0; t < 12; ++t)
+        for (auto& shot : shots)
         {
-            if (t != 0 && t != 4 && t != 6 && t != 7 && t != 8 && t != 9 && t != 11)
-                continue;
+            if (shot.module >= 0) moddEditor->selectModule (shot.module);
+            else                  moddEditor->showRouting();
 
-            if (auto* tab = dynamic_cast<juce::Button*> (editor->findChildWithID ("tab" + juce::String (t))))
-                tab->onClick();
-
-            save (*editor, outDir.getChildFile (juce::String ("editor_") + juce::String (width) + "_" + names[t] + ".png"));
+            save (*editor, outDir.getChildFile (juce::String ("editor_") + juce::String (width) + "_" + shot.name + ".png"));
         }
     }
+
+    // A short chain, as a new user would build it.
+    for (int m = mm::kNumModules - 1; m >= 0; --m)
+        if (m != mm::modLfo0 && m != mm::modMacros && m != mm::modEnv0)
+            proc->removeModule (m);
+    proc->dispatchPendingMessages();   // no message loop here
+    moddEditor->selectModule (mm::modLfo0);
+    editor->setSize (900, 360 + mm::ModdMuddEditor::panelHeight);
+    save (*editor, outDir.getChildFile ("editor_chain.png"));
+
+    // And an empty chain.
+    for (int m : std::vector<int> (proc->getModules()))
+        proc->removeModule (m);
+    proc->dispatchPendingMessages();
+    save (*editor, outDir.getChildFile ("editor_empty_chain.png"));
 
     editor.reset();
     proc->releaseResources();

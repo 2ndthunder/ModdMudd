@@ -8,6 +8,8 @@
 namespace mm
 {
 
+class ModuleTab;
+
 class ModdMuddEditor final : public juce::AudioProcessorEditor,
                              public juce::DragAndDropContainer,
                              private ModdMuddProcessor::Listener,
@@ -22,6 +24,13 @@ public:
     void resized() override;
     bool keyPressed (const juce::KeyPress&) override;
 
+    // Modulation chain
+    void selectModule (int module);
+    void showRouting();
+    void requestRemoveModule (int module);
+    void moveModuleBefore (int module, int targetModule);
+    int getSelectedModule() const noexcept   { return showingRouting ? -1 : selectedModule; }
+
 private:
     void slotsAboutToChange() override;
     void changeListenerCallback (juce::ChangeBroadcaster*) override;
@@ -30,7 +39,8 @@ private:
     void rebuildSlotButtons();
     void showSelectedSlot();
     void updateSize();
-    void selectTab (int index);
+    void rebuildModuleTabs();
+    void showAddModuleMenu();
     void layoutPanel (juce::Rectangle<int> panel);
 
     void showLoadMenu (int replaceIndex);
@@ -45,13 +55,18 @@ private:
     juce::TextButton slotButton, addButton { "+" }, viewButton, presetButton { "Presets" }, settingsButton { "Settings" };
     HostedView hosted;
 
-    juce::OwnedArray<juce::TextButton> tabButtons;
-    juce::OwnedArray<juce::Component> panels;
+    juce::OwnedArray<ModuleTab> moduleTabs;
+    juce::TextButton addModuleButton { "+ Add" }, routingButton { "Routing" };
+    std::array<std::unique_ptr<juce::Component>, kNumModules> modulePanels;
+    std::unique_ptr<MatrixPanel> matrixPanel;
+    std::vector<int> modulesShown;
+    juce::Rectangle<int> contentArea;
     juce::Label status;
 
     std::unique_ptr<juce::FileChooser> chooser;
     int selectedSlot = 0;
-    int selectedTab = 0;
+    int selectedModule = modLfo0;
+    bool showingRouting = false;
     bool preferNative = true;
     juce::String lastCatalogStatus;
     juce::StringArray slotUidsShown;

@@ -625,6 +625,49 @@ struct RtSwapTests final : juce::UnitTest
     }
 };
 
+//==============================================================================
+struct ModuleTests final : juce::UnitTest
+{
+    ModuleTests() : juce::UnitTest ("Modules", "ModdMudd") {}
+
+    void runTest() override
+    {
+        beginTest ("Which sources and targets each module owns");
+        expect (moduleOwnsSource (modLfo0 + 2, srcLfo0 + 2));
+        expect (! moduleOwnsSource (modLfo0 + 2, srcLfo0 + 1));
+        expect (moduleOwnsSource (modMacros, srcMacro0 + 7));
+        expect (moduleOwnsSource (modXy, srcXyY));
+        expect (! moduleOwnsSource (modBlend, srcXyX));
+        expect (moduleOwnsSource (modEnv0 + 1, srcEnv0 + 1));
+
+        expect (moduleOwnsInternal (modLfo0 + 1, lfoInternal (1, 2)));
+        expect (! moduleOwnsInternal (modLfo0, lfoInternal (1, 0)));
+        expect (moduleOwnsInternal (modRandom0 + 1, randomInternal (1, 1)));
+        expect (moduleOwnsInternal (modMacros, ipMacroAmount0 + 5));
+        expect (moduleOwnsInternal (modXy, ipXyX));
+        expect (moduleOwnsInternal (modBlend, ipBlendY));
+        expect (moduleOwnsInternal (modEnv0, envInternal (0, 0)));
+
+        beginTest ("Every source and target belongs to exactly one module");
+        for (int src = 0; src < kNumSources; ++src)
+        {
+            int owners = 0;
+            for (int m = 0; m < kNumModules; ++m)
+                owners += moduleOwnsSource (m, src) ? 1 : 0;
+            expectEquals (owners, 1, getSourceName (src));
+        }
+
+        for (int ip = 0; ip < kNumInternalParams; ++ip)
+        {
+            int owners = 0;
+            for (int m = 0; m < kNumModules; ++m)
+                owners += moduleOwnsInternal (m, ip) ? 1 : 0;
+            expectEquals (owners, 1, getInternalParamName (ip));
+        }
+    }
+};
+
+static ModuleTests moduleTests;
 static LfoTests lfoTests;
 static RandomTests randomTests;
 static EnvelopeTests envelopeTests;

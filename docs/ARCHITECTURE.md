@@ -102,7 +102,7 @@ JUCE also adds 2048 hidden parameters to plug-ins that take MIDI input. They emu
 
 ## Modulators
 
-All produce one value per sub-block. Bipolar sources give -1..1, unipolar 0..1. Connections can remap the range (natural, unipolar or bipolar polarity).
+All produce one value per sub-block. All of them always run on the audio thread (they are cheap). The chain in the editor only decides which ones the user sees and can connect. Bipolar sources give -1..1, unipolar 0..1. Connections can remap the range (natural, unipolar or bipolar polarity).
 
 | Source | Output | Notes |
 |---|---|---|
@@ -153,10 +153,12 @@ Presets are the same XML in `.mmpreset` files (`~/Documents/ModdMudd/Presets`).
 The modulation panel snaps onto the hosted plug-in, so the two read as one window:
 
 - The hosted plug-in's own window sits flush at the top, with no frame or top bar.
-- ModdMudd's panel sits directly underneath at the same width. Its header strip holds the plug-in menu (switch, load, replace, reorder, remove), the view toggle, presets and settings. Below that are the modulator tabs and a status line.
+- ModdMudd's panel sits directly underneath at the same width. Its header strip holds the plug-in menu (switch, load, replace, reorder, remove), the view toggle, presets and settings. Below that are the modulation chain, the selected modulator's controls, and a status line.
 - The window is exactly `plug-in height + panelHeight` tall and as wide as the plug-in. The exception is a plug-in narrower than the panel's minimum (660 px): it is centred above the panel instead.
 - If the plug-in's window can be resized, resizing ModdMudd's window resizes the plug-in (within its own limits), and the panel follows. If it can't, ModdMudd's window takes the plug-in's fixed size.
 - With ModdMudd's parameter list showing instead, the window resizes freely.
+- **The modulation chain.** You add only the modulators you want ("+ Add"), drag their tabs to reorder them, and remove them with the x on the tab (or right-click, or Delete). Removing a modulator also removes its connections. Connecting a modulator that isn't in the chain, such as "Assign to macro" from the parameter list, adds it automatically. The chain and its order are saved with the session. Older sessions show every modulator that is in use.
+- **Routing.** The matrix, with every connection in one list, sits behind the Routing button, so the main view is just the plug-in and the chain.
 - Panels adapt to the width. Rows shrink towards minimum sizes, labels drop out before controls do, and the matrix hides its offset, range and smoothing columns below 820 px.
 
 `ModdMuddUISnapshot` checks the snapping: the window width and height against the hosted plug-in's window.

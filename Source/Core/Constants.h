@@ -86,6 +86,65 @@ constexpr int ownerNodeForInternal (int ip) noexcept
 }
 
 //==============================================================================
+// Modules are what the user adds to the modulation chain in the editor. Each
+// owns some sources and/or some cross-modulation targets.
+enum ModuleId : int
+{
+    modLfo0    = 0,
+    modRandom0 = modLfo0 + kNumLfos,
+    modMacros  = modRandom0 + kNumRandoms,
+    modXy,
+    modBlend,
+    modEnv0,
+    kNumModules = modEnv0 + kNumEnvs
+};
+
+inline juce::String getModuleName (int m)
+{
+    if (m >= modLfo0 && m < modRandom0)    return "LFO " + juce::String (m - modLfo0 + 1);
+    if (m >= modRandom0 && m < modMacros)  return "Random " + juce::String (m - modRandom0 + 1);
+    if (m == modMacros)                    return "Macros";
+    if (m == modXy)                        return "XY Pad";
+    if (m == modBlend)                     return "Preset Blender";
+    if (m >= modEnv0 && m < kNumModules)   return "Envelope " + juce::String (m - modEnv0 + 1);
+    return {};
+}
+
+inline juce::String getModuleTabName (int m)
+{
+    if (m >= modLfo0 && m < modRandom0)    return "LFO " + juce::String (m - modLfo0 + 1);
+    if (m >= modRandom0 && m < modMacros)  return "RND " + juce::String (m - modRandom0 + 1);
+    if (m == modMacros)                    return "MACRO";
+    if (m == modXy)                        return "XY";
+    if (m == modBlend)                     return "BLEND";
+    if (m >= modEnv0 && m < kNumModules)   return "ENV " + juce::String (m - modEnv0 + 1);
+    return {};
+}
+
+inline bool moduleOwnsSource (int m, int source)
+{
+    if (m >= modLfo0 && m < modRandom0)    return source == srcLfo0 + (m - modLfo0);
+    if (m >= modRandom0 && m < modMacros)  return source == srcRandom0 + (m - modRandom0);
+    if (m == modMacros)                    return source >= srcMacro0 && source < srcXyX;
+    if (m == modXy)                        return source == srcXyX || source == srcXyY;
+    if (m >= modEnv0 && m < kNumModules)   return source == srcEnv0 + (m - modEnv0);
+    return false;
+}
+
+inline bool moduleOwnsInternal (int m, int ip)
+{
+    if (m == modBlend)
+        return ip == ipBlendX || ip == ipBlendY;
+
+    const int owner = ownerNodeForInternal (ip);
+    for (int s = 0; s < kNumSources; ++s)
+        if (moduleOwnsSource (m, s) && nodeForSource (s) == owner)
+            return true;
+
+    return false;
+}
+
+//==============================================================================
 enum class Polarity : int
 {
     natural = 0,   // use the source as it is

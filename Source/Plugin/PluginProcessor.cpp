@@ -775,6 +775,13 @@ ModMatrix::AddResult ModdMuddProcessor::addConnection (Connection c)
 
     if (result == ModMatrix::AddResult::added)
     {
+        // Connecting a module that isn't in the chain (e.g. "Assign to
+        // macro" from the parameter list) adds it, so it can be seen.
+        for (int m = 0; m < kNumModules; ++m)
+            if (! isModuleActive (m)
+                 && (moduleOwnsSource (m, c.source) || (c.dest.internal && moduleOwnsInternal (m, c.dest.internalId))))
+                modules.push_back (m);
+
         rebuild();
         sendChangeMessage();
     }
@@ -828,6 +835,60 @@ void ModdMuddProcessor::removeConnectionsTo (const Destination& d)
         matrix.removeIf ([&] (const Connection& c) { return c.dest.key() == key; });
     }
     rebuild();
+    sendChangeMessage();
+}
+
+bool ModdMuddProcessor::isModuleActive (int module) const
+{
+    return std::find (modules.begin(), modules.end(), module) != modules.end();
+}
+
+void ModdMuddProcessor::addModule (int module)
+{
+    if (! juce::isPositiveAndBelow (module, kNumModules) || isModuleActive (module))
+        return;
+
+    modules.push_back (module);
+    sendChangeMessage();
+}
+
+void ModdMuddProcessor::removeModule (int module)
+{
+    auto it = std::find (modules.begin(), modules.end(), module);
+    if (it == modules.end())
+        return;
+
+    modules.erase (it);
+
+    if (armedSource >= 0 && moduleOwnsSource (module, armedSource))
+        armedSource = -1;
+
+    {
+        const juce::ScopedLock sl (modelLock);
+        matrix.removeIf ([module] (const Connection& c)
+        {
+            return moduleOwnsSource (module, c.source) || (c.dest.internal && moduleOwnsInternal (module, c.dest.internalId));
+        });
+    }
+
+    // A removed blender stops blending (its snapshots are kept).
+    if (module == modBlend)
+        if (auto* p = state.getParameter (ids::blendOn))
+            p->setValueNotifyingHost (0.0f);
+
+    rebuild();
+    sendChangeMessage();
+}
+
+void ModdMuddProcessor::moveModule (int module, int newIndex)
+{
+    auto it = std::find (modules.begin(), modules.end(), module);
+    if (it == modules.end())
+        return;
+
+    modules.erase (it);
+    newIndex = juce::jlimit (0, (int) modules.size(), newIndex);
+    modules.insert (modules.begin() + newIndex, module);
     sendChangeMessage();
 }
 
@@ -1300,6 +1361,12 @@ juce::ValueTree ModdMuddProcessor::createStateTree()
     juce::ValueTree s ("Settings");
     s.setProperty ("subBlock", subBlockSize, nullptr);
     s.setProperty ("theme", themeIndex, nullptr);
+
+    juce::StringArray moduleList;
+    for (int m : modules)
+        moduleList.add (juce::String (m));
+    s.setProperty ("modules", moduleList.joinIntoString (","), nullptr);
+
     root.appendChild (s, nullptr);
 
     return root;
@@ -1451,6 +1518,30 @@ void ModdMuddProcessor::restoreStateTree (const juce::ValueTree& root)
         const auto s = root.getChildWithName ("Settings");
         subBlockSize = juce::jlimit (0, 1024, (int) s.getProperty ("subBlock", kDefaultSubBlock));
         themeIndex = s.getProperty ("theme", 0);
+
+        modules.clear();
+        if (s.hasProperty ("modules"))
+        {
+            for (auto& m : juce::StringArray::fromTokens (s.getProperty ("modules").toString(), ",", ""))
+                if (const int id = m.getIntValue(); juce::isPositiveAndBelow (id, kNumModules) && ! isModuleActive (id))
+                    modules.push_back (id);
+        }
+        else
+        {
+            // Older sessions: show every module that is in use.
+            for (int m = 0; m < kNumModules; ++m)
+            {
+                bool used = (m == modBlend && (state.getRawParameterValue (ids::blendOn)->load() >= 0.5f || ! snapshots.empty()));
+                for (auto& c : matrix.getConnections())
+                    used = used || moduleOwnsSource (m, c.source) || (c.dest.internal && moduleOwnsInternal (m, c.dest.internalId));
+
+                if (used)
+                    modules.push_back (m);
+            }
+
+            if (modules.empty())
+                modules.push_back (modLfo0);
+        }
 
         previousTargets.clear();
     }

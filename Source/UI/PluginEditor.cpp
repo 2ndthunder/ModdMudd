@@ -3,6 +3,131 @@
 namespace mm
 {
 
+//==============================================================================
+/** A modulator in the chain: click to edit it, drag to reorder, x to remove. */
+class ModuleTab final : public juce::Component,
+                        public juce::DragAndDropTarget,
+                        public juce::SettableTooltipClient
+{
+public:
+    ModuleTab (ModdMuddEditor& e, int m) : editor (e), module (m)
+    {
+        setComponentID ("module" + juce::String (m));
+        setTitle (getModuleName (m) + " modulator");
+        setDescription ("Press Enter to edit, Delete to remove");
+        setTooltip (getModuleName (m) + ": click to edit, drag to reorder, x to remove");
+        setWantsKeyboardFocus (true);
+        setMouseCursor (juce::MouseCursor::PointingHandCursor);
+    }
+
+    const int module;
+    bool selected = false;
+
+    void paint (juce::Graphics& g) override
+    {
+        const auto& p = paletteFor (*this);
+        auto r = getLocalBounds().toFloat().reduced (1.0f, 0.5f);
+
+        g.setColour (selected ? p.active : (isMouseOver() ? p.panelHeader.brighter (0.1f) : p.panelHeader));
+        g.fillRoundedRectangle (r, 3.0f);
+        g.setColour (hasKeyboardFocus (false) ? p.active : p.outline);
+        g.drawRoundedRectangle (r, 3.0f, 1.0f);
+
+        if (dropMarker)
+        {
+            g.setColour (p.value);
+            g.fillRect (r.removeFromLeft (3.0f));
+        }
+
+        auto textArea = getLocalBounds().reduced (4, 0);
+        if (showClose())
+        {
+            const auto x = closeArea().toFloat().withSizeKeepingCentre (7.0f, 7.0f);
+            g.setColour (selected ? juce::Colours::black.withAlpha (0.7f) : p.textDim);
+            g.drawLine (x.getX(), x.getY(), x.getRight(), x.getBottom(), 1.5f);
+            g.drawLine (x.getRight(), x.getY(), x.getX(), x.getBottom(), 1.5f);
+            textArea.removeFromRight (closeArea().getWidth() - 2);
+        }
+
+        g.setColour (selected ? juce::Colours::black : p.text);
+        g.setFont (MuddLookAndFeel::font (12.0f, true));
+        g.drawFittedText (getModuleTabName (module), textArea, juce::Justification::centred, 1, 0.7f);
+    }
+
+    void mouseEnter (const juce::MouseEvent&) override  { repaint(); }
+    void mouseExit (const juce::MouseEvent&) override   { repaint(); }
+
+    void mouseDown (const juce::MouseEvent&) override   { dragged = false; }
+
+    void mouseDrag (const juce::MouseEvent& e) override
+    {
+        if (! dragged && e.getDistanceFromDragStart() > 5)
+        {
+            dragged = true;
+            if (auto* c = juce::DragAndDropContainer::findParentDragContainerFor (this))
+                c->startDragging ("mmtab:" + juce::String (module), this);
+        }
+    }
+
+    void mouseUp (const juce::MouseEvent& e) override
+    {
+        if (dragged)
+            return;
+
+        if (e.mods.isPopupMenu())
+        {
+            juce::PopupMenu m;
+            m.addSectionHeader (getModuleName (module));
+            m.addItem (1, "Remove " + getModuleName (module));
+
+            juce::Component::SafePointer<ModuleTab> safe (this);
+            auto* ed = &editor;
+            const int id = module;
+            m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this), [ed, safe, id] (int r)
+            {
+                if (safe != nullptr && r == 1)
+                    ed->requestRemoveModule (id);
+            });
+            return;
+        }
+
+        if (showClose() && closeArea().contains (e.getPosition()))
+            editor.requestRemoveModule (module);
+        else
+            editor.selectModule (module);
+    }
+
+    bool keyPressed (const juce::KeyPress& k) override
+    {
+        if (k == juce::KeyPress::returnKey || k == juce::KeyPress::spaceKey)  { editor.selectModule (module); return true; }
+        if (k == juce::KeyPress::deleteKey || k == juce::KeyPress::backspaceKey) { editor.requestRemoveModule (module); return true; }
+        return false;
+    }
+
+    bool isInterestedInDragSource (const SourceDetails& d) override
+    {
+        return d.description.toString().startsWith ("mmtab:") && d.description.toString() != "mmtab:" + juce::String (module);
+    }
+
+    void itemDragEnter (const SourceDetails&) override  { dropMarker = true; repaint(); }
+    void itemDragExit (const SourceDetails&) override   { dropMarker = false; repaint(); }
+
+    void itemDropped (const SourceDetails& d) override
+    {
+        dropMarker = false;
+        const int moving = d.description.toString().fromFirstOccurrenceOf (":", false, false).getIntValue();
+        editor.moveModuleBefore (moving, module);
+    }
+
+private:
+    bool showClose() const                       { return getWidth() >= 62 && (selected || isMouseOver()); }
+    juce::Rectangle<int> closeArea() const       { return getLocalBounds().removeFromRight (juce::jmin (18, getWidth() / 3)); }
+
+    ModdMuddEditor& editor;
+    bool dragged = false, dropMarker = false;
+};
+
+//==============================================================================
 ModdMuddEditor::ModdMuddEditor (ModdMuddProcessor& p)
     : AudioProcessorEditor (p), processor (p), hosted (p)
 {
@@ -28,26 +153,44 @@ ModdMuddEditor::ModdMuddEditor (ModdMuddProcessor& p)
     hosted.onLoadRequested = [this] { showLoadMenu (-1); };
     addAndMakeVisible (hosted);
 
-    // Modulator tabs
-    auto addTab = [this] (const juce::String& name, juce::Component* panel)
-    {
-        auto* b = tabButtons.add (new juce::TextButton (name));
-        const int index = tabButtons.size() - 1;
-        b->setClickingTogglesState (false);
-        b->setComponentID ("tab" + juce::String (index));
-        b->onClick = [this, index] { selectTab (index); };
-        addAndMakeVisible (b);
-        panels.add (panel);
-        addChildComponent (panel);
-    };
+    // The modulation chain: one editor per module, shown when selected.
+    for (int i = 0; i < kNumLfos; ++i)    modulePanels[(size_t) (modLfo0 + i)] = std::make_unique<LfoPanel> (processor, i);
+    for (int i = 0; i < kNumRandoms; ++i) modulePanels[(size_t) (modRandom0 + i)] = std::make_unique<RandomPanel> (processor, i);
+    modulePanels[(size_t) modMacros] = std::make_unique<MacroPanel> (processor);
+    modulePanels[(size_t) modXy]     = std::make_unique<XYPanel> (processor);
+    modulePanels[(size_t) modBlend]  = std::make_unique<BlendPanel> (processor);
+    for (int i = 0; i < kNumEnvs; ++i)    modulePanels[(size_t) (modEnv0 + i)] = std::make_unique<EnvPanel> (processor, i);
 
-    for (int i = 0; i < kNumLfos; ++i)    addTab ("LFO " + juce::String (i + 1), new LfoPanel (processor, i));
-    for (int i = 0; i < kNumRandoms; ++i) addTab ("RND " + juce::String (i + 1), new RandomPanel (processor, i));
-    addTab ("MACRO", new MacroPanel (processor));
-    addTab ("XY", new XYPanel (processor));
-    addTab ("BLEND", new BlendPanel (processor));
-    for (int i = 0; i < kNumEnvs; ++i)    addTab ("ENV " + juce::String (i + 1), new EnvPanel (processor, i));
-    addTab ("MATRIX", new MatrixPanel (processor));
+    for (auto& panel : modulePanels)
+        addChildComponent (*panel);
+
+    matrixPanel = std::make_unique<MatrixPanel> (processor);
+    addChildComponent (*matrixPanel);
+
+    addModuleButton.setTooltip ("Add a modulator to the chain");
+    addModuleButton.setComponentID ("addModule");
+    addModuleButton.onClick = [this] { showAddModuleMenu(); };
+    routingButton.setTooltip ("Every modulation connection in one list");
+    routingButton.setComponentID ("routing");
+    routingButton.setClickingTogglesState (false);
+    routingButton.onClick = [this]
+    {
+        if (! showingRouting)
+        {
+            showRouting();
+        }
+        else if (! processor.getModules().empty())
+        {
+            selectModule (processor.isModuleActive (selectedModule) ? selectedModule : processor.getModules().front());
+        }
+        else
+        {
+            showingRouting = false;
+            rebuildModuleTabs();
+        }
+    };
+    addAndMakeVisible (addModuleButton);
+    addAndMakeVisible (routingButton);
 
     status.setFont (MuddLookAndFeel::font (12.5f));
     addAndMakeVisible (status);
@@ -56,7 +199,7 @@ ModdMuddEditor::ModdMuddEditor (ModdMuddProcessor& p)
     processor.addChangeListener (this);
     processor.getCatalog().addChangeListener (this);
 
-    selectTab (0);
+    rebuildModuleTabs();
     rebuildSlotButtons();
     showSelectedSlot();
 
@@ -93,6 +236,9 @@ void ModdMuddEditor::changeListenerCallback (juce::ChangeBroadcaster* source)
 
     const bool slotsChanged = uids != slotUidsShown;
     rebuildSlotButtons();
+
+    if (processor.getModules() != modulesShown)
+        rebuildModuleTabs();
 
     if (slotsChanged)
         showSelectedSlot();
@@ -185,14 +331,157 @@ void ModdMuddEditor::updateSize()
     resized();
 }
 
-void ModdMuddEditor::selectTab (int index)
+void ModdMuddEditor::rebuildModuleTabs()
 {
-    selectedTab = index;
-    for (int i = 0; i < panels.size(); ++i)
+    modulesShown = processor.getModules();
+
+    for (auto* t : moduleTabs)
+        removeChildComponent (t);
+    moduleTabs.clear();
+
+    for (int m : modulesShown)
+        addAndMakeVisible (moduleTabs.add (new ModuleTab (*this, m)));
+
+    addModuleButton.setEnabled ((int) modulesShown.size() < kNumModules);
+
+    // Keep the selection on a module that is still in the chain.
+    if (! showingRouting && std::find (modulesShown.begin(), modulesShown.end(), selectedModule) == modulesShown.end())
+        selectedModule = modulesShown.empty() ? -1 : modulesShown.front();
+
+    if (modulesShown.empty() && ! showingRouting)
     {
-        panels[i]->setVisible (i == index);
-        tabButtons[i]->setToggleState (i == index, juce::dontSendNotification);
+        // The empty chain shows a hint (painted) instead of a module.
+        for (auto& panel : modulePanels)
+            panel->setVisible (false);
+        matrixPanel->setVisible (false);
+        routingButton.setToggleState (false, juce::dontSendNotification);
     }
+    else if (showingRouting || selectedModule < 0)
+    {
+        showRouting();
+    }
+    else
+    {
+        selectModule (selectedModule);
+    }
+
+    resized();
+}
+
+void ModdMuddEditor::selectModule (int module)
+{
+    if (! processor.isModuleActive (module))
+        return;
+
+    selectedModule = module;
+    showingRouting = false;
+
+    for (int m = 0; m < kNumModules; ++m)
+        modulePanels[(size_t) m]->setVisible (m == module);
+
+    matrixPanel->setVisible (false);
+    routingButton.setToggleState (false, juce::dontSendNotification);
+
+    for (auto* t : moduleTabs)
+    {
+        t->selected = t->module == module;
+        t->repaint();
+    }
+
+    repaint();
+}
+
+void ModdMuddEditor::showRouting()
+{
+    showingRouting = true;
+
+    for (auto& panel : modulePanels)
+        panel->setVisible (false);
+
+    matrixPanel->setVisible (true);
+    routingButton.setToggleState (true, juce::dontSendNotification);
+
+    for (auto* t : moduleTabs)
+    {
+        t->selected = false;
+        t->repaint();
+    }
+
+    repaint();
+}
+
+void ModdMuddEditor::requestRemoveModule (int module)
+{
+    // Deferred: removing rebuilds the tabs, including the one that was clicked.
+    const auto& list = processor.getModules();
+    auto it = std::find (list.begin(), list.end(), module);
+    int next = -1;
+    if (it != list.end())
+    {
+        if (it + 1 != list.end()) next = *(it + 1);
+        else if (it != list.begin()) next = *(it - 1);
+    }
+
+    juce::Component::SafePointer<ModdMuddEditor> safe (this);
+    juce::MessageManager::callAsync ([safe, module, next]
+    {
+        if (safe == nullptr)
+            return;
+
+        if (safe->selectedModule == module)
+            safe->selectedModule = next;
+
+        safe->processor.removeModule (module);
+        safe->processor.setStatus (getModuleName (module) + " removed, with its connections.");
+    });
+}
+
+void ModdMuddEditor::moveModuleBefore (int module, int targetModule)
+{
+    const auto& list = processor.getModules();
+    auto target = std::find (list.begin(), list.end(), targetModule);
+    auto moving = std::find (list.begin(), list.end(), module);
+    if (target == list.end() || moving == list.end())
+        return;
+
+    int index = (int) (target - list.begin());
+    if (moving < target)
+        --index;   // the list shrinks by one before the insert
+
+    juce::Component::SafePointer<ModdMuddEditor> safe (this);
+    juce::MessageManager::callAsync ([safe, module, index]
+    {
+        if (safe != nullptr)
+            safe->processor.moveModule (module, index);
+    });
+}
+
+void ModdMuddEditor::showAddModuleMenu()
+{
+    juce::PopupMenu m;
+    auto addGroup = [this, &m] (const juce::String& title, int first, int count)
+    {
+        m.addSectionHeader (title);
+        for (int i = first; i < first + count; ++i)
+            m.addItem (1 + i, getModuleName (i), ! processor.isModuleActive (i));
+    };
+
+    addGroup ("Movement", modLfo0, kNumLfos);
+    addGroup ("Randomness", modRandom0, kNumRandoms);
+    addGroup ("Control", modMacros, 3);   // macros, XY pad, preset blender
+    addGroup ("Follow audio", modEnv0, kNumEnvs);
+
+    juce::Component::SafePointer<ModdMuddEditor> safe (this);
+    m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&addModuleButton), [safe] (int r)
+    {
+        if (safe == nullptr || r <= 0)
+            return;
+
+        const int module = r - 1;
+        safe->processor.addModule (module);
+        safe->rebuildModuleTabs();
+        safe->selectModule (module);
+    });
 }
 
 //==============================================================================
@@ -228,6 +517,16 @@ void ModdMuddEditor::paint (juce::Graphics& g)
         g.drawText ("INST", logo.withTrimmedLeft (moddW * 2 + 5), juce::Justification::centredLeft);
     }
 
+    if (processor.getModules().empty() && ! showingRouting)
+    {
+        g.setColour (p.panel);
+        g.fillRoundedRectangle (contentArea.toFloat(), 4.0f);
+        g.setColour (p.textDim);
+        g.setFont (MuddLookAndFeel::font (14.0f));
+        g.drawFittedText ("Your modulation chain is empty. Click \"+ Add\" to add an LFO, randomizer, macros, "
+                          "XY pad, preset blender or envelope follower.", contentArea.reduced (30), juce::Justification::centred, 3);
+    }
+
     g.setColour (p.panelHeader);
     g.fillRect (getLocalBounds().removeFromBottom (statusHeight));
 }
@@ -253,15 +552,29 @@ void ModdMuddEditor::layoutPanel (juce::Rectangle<int> panel)
 
     auto content = panel.reduced (pad, 0);
     content.removeFromTop (pad);
+
+    // Chain row: the user's modules, "+ Add", and Routing on the right.
     auto tabs = content.removeFromTop (tabsHeight);
-    const int tabW = juce::jmin (90, tabs.getWidth() / juce::jmax (1, tabButtons.size()));
-    for (auto* b : tabButtons)
-        b->setBounds (tabs.removeFromLeft (tabW).reduced (1, 0));
+    routingButton.setBounds (tabs.removeFromRight (86));
+    tabs.removeFromRight (8);
+
+    const int n = moduleTabs.size();
+    const int addW = 64;
+    const int tabW = n == 0 ? 0 : juce::jlimit (40, 96, (tabs.getWidth() - addW - 4) / n);
+    for (auto* t : moduleTabs)
+    {
+        t->setBounds (tabs.removeFromLeft (tabW).reduced (1, 0));
+    }
+    tabs.removeFromLeft (4);
+    addModuleButton.setBounds (tabs.removeFromLeft (addW));
 
     content.removeFromTop (4);
     content.removeFromBottom (pad);
-    for (auto* panelComponent : panels)
+    contentArea = content;
+
+    for (auto& panelComponent : modulePanels)
         panelComponent->setBounds (content);
+    matrixPanel->setBounds (content);
 }
 
 void ModdMuddEditor::resized()

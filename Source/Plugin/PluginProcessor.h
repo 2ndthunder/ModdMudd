@@ -146,6 +146,14 @@ public:
     int  getSubBlockSize() const noexcept         { return subBlockSize; }
     void setSubBlockSize (int samples);
 
+    /** The modulators the user has added, in the order they chose. */
+    const std::vector<int>& getModules() const noexcept   { return modules; }
+    bool isModuleActive (int module) const;
+    void addModule (int module);
+    /** Removes a module from the chain, along with its connections. */
+    void removeModule (int module);
+    void moveModule (int module, int newIndex);
+
     int  getThemeIndex() const noexcept           { return themeIndex; }
     void setThemeIndex (int t)                    { themeIndex = t; }
 
@@ -210,6 +218,7 @@ private:
     std::map<juce::String, int> slotParamLookup;   // "uid:paramId" -> DAW slot
     int subBlockSize = kDefaultSubBlock;
     int themeIndex = 0;
+    std::vector<int> modules { modLfo0 };
     int armedSource = -1;
     juce::String lastError;
     std::atomic<bool> rebuildPending { false };
