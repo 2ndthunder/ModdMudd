@@ -127,6 +127,13 @@ public:
     int getArmedSource() const noexcept  { return armedSource; }
 
     void captureSnapshot (int index);
+
+    /** Fills a blender snapshot from one of a hosted plug-in's own presets
+        (programs). It takes a moment: the plug-in is switched to the preset,
+        its parameters are read once they settle, then the plug-in is put back
+        exactly as it was. */
+    void captureSnapshotFromProgram (int snapshot, int slotIndex, int program);
+    bool isCapturingProgram() const noexcept      { return programCapture != nullptr; }
     void recallSnapshot (int index);
     void clearSnapshot (int index);
     bool hasSnapshot (int index) const;
@@ -231,6 +238,11 @@ private:
     std::atomic<bool> rebuildPending { false };
 
     juce::ListenerList<Listener> slotListeners;
+
+    struct ProgramCapture;
+    std::unique_ptr<ProgramCapture> programCapture;
+    void pollProgramCapture();
+    void finishProgramCapture (bool captured);
 
     // Audio-side
     double currentSampleRate = 44100.0;

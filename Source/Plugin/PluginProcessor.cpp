@@ -19,6 +19,23 @@ juce::AudioProcessor::BusesProperties ModdMuddProcessor::makeBuses()
 
 static juce::String snapshotKey (const juce::String& uid, const juce::String& paramId)   { return uid + ":" + paramId; }
 
+//==============================================================================
+struct ModdMuddProcessor::ProgramCapture final : private juce::Timer
+{
+    ProgramCapture (ModdMuddProcessor& o) : owner (o) {}
+    ~ProgramCapture() override  { stopTimer(); }
+
+    void start()                { startTimer (40); }
+    void timerCallback() override { owner.pollProgramCapture(); }
+
+    ModdMuddProcessor& owner;
+    int snapshot = 0, program = 0;
+    juce::String slotUid, programName;
+    juce::MemoryBlock savedState;
+    std::vector<float> savedBases, lastValues;
+    int elapsedMs = 0, stablePolls = 0;
+};
+
 ModdMuddProcessor::ModdMuddProcessor()
     : AudioProcessor (makeBuses()),
       state (*this, nullptr, "PARAMS", createParameterLayout (slotParams))
@@ -47,6 +64,7 @@ ModdMuddProcessor::ModdMuddProcessor()
 
 ModdMuddProcessor::~ModdMuddProcessor()
 {
+    programCapture.reset();
     stopTimer();
     state.removeParameterListener (ids::blendOn, this);
     for (int i = 0; i < kNumRandoms; ++i)
@@ -184,11 +202,19 @@ void ModdMuddProcessor::applyTargets (RtState& st, int numSamples) noexcept
     const auto weights = engine.getBlendWeights();
     const bool blendOn = settings.blendEnabled;
 
+    std::array<bool, kMaxHostedPlugins> resync {};
+    for (int s = 0; s < st.numSlots; ++s)
+        if (auto* slot = st.slots[(size_t) s])
+            resync[(size_t) s] = slot->consumeResync();
+
     for (auto& t : st.plan.hosted)
     {
         auto* slot = st.slots[(size_t) t.slot];
-        if (slot == nullptr || slot->isMissing())
+        if (slot == nullptr || slot->isMissing() || slot->holdWrites.load (std::memory_order_relaxed))
             continue;
+
+        if (resync[(size_t) t.slot])
+            slot->getState (t.param).lastWritten = -1.0f;
 
         auto* param = slot->getParam (t.param);
         if (param == nullptr)
@@ -293,7 +319,7 @@ void ModdMuddProcessor::handleSlotAutomation (RtState& st) noexcept
         lastSlotValue[(size_t) k] = v;
 
         auto* slot = st.slots[(size_t) si];
-        if (slot == nullptr || slot->isMissing())
+        if (slot == nullptr || slot->isMissing() || slot->holdWrites.load (std::memory_order_relaxed))
             continue;
 
         auto& ps = slot->getState (pi);
@@ -973,6 +999,108 @@ void ModdMuddProcessor::captureSnapshot (int index)
     sendChangeMessage();
 }
 
+void ModdMuddProcessor::captureSnapshotFromProgram (int snapshot, int slotIndex, int program)
+{
+    if (programCapture != nullptr || ! juce::isPositiveAndBelow (snapshot, kNumSnapshots)
+         || ! juce::isPositiveAndBelow (slotIndex, (int) slots.size()))
+        return;
+
+    auto& slot = *slots[(size_t) slotIndex];
+    auto* inst = slot.getInstance();
+    if (inst == nullptr || ! juce::isPositiveAndBelow (program, inst->getNumPrograms()))
+        return;
+
+    auto capture = std::make_unique<ProgramCapture> (*this);
+    capture->snapshot = snapshot;
+    capture->program = program;
+    capture->slotUid = slot.getUid();
+    capture->programName = inst->getProgramName (program);
+    capture->savedState = slot.getPluginState();
+
+    for (int i = 0; i < slot.getNumParams(); ++i)
+        capture->savedBases.push_back (slot.getState (i).base.load());
+
+    // Stop writing modulation to this plug-in so the preset's own values show.
+    slot.holdWrites.store (true);
+    inst->setCurrentProgram (program);
+
+    programCapture = std::move (capture);
+    programCapture->start();
+    setStatus ("Reading preset \"" + programCapture->programName + "\"...");
+}
+
+void ModdMuddProcessor::pollProgramCapture()
+{
+    auto& c = *programCapture;
+    auto* slot = findSlot (c.slotUid);
+
+    if (slot == nullptr || slot->isMissing())
+    {
+        finishProgramCapture (false);
+        return;
+    }
+
+    std::vector<float> values;
+    for (int i = 0; i < slot->getNumParams(); ++i)
+        values.push_back (slot->getParam (i)->getValue());
+
+    c.elapsedMs += 40;
+    c.stablePolls = (values == c.lastValues) ? c.stablePolls + 1 : 0;
+    c.lastValues = values;
+
+    // The new values arrive through the plug-in's controller, a little after
+    // the preset change. Wait until they stop changing (or give up waiting).
+    if ((c.elapsedMs >= 120 && c.stablePolls >= 2) || c.elapsedMs >= 2000)
+        finishProgramCapture (true);
+}
+
+void ModdMuddProcessor::finishProgramCapture (bool captured)
+{
+    auto c = std::move (programCapture);
+    juce::String message;
+
+    if (auto* slot = findSlot (c->slotUid))
+    {
+        if (captured)
+        {
+            const juce::ScopedLock sl (modelLock);
+
+            for (int pi = 0; pi < slot->getNumParams(); ++pi)
+            {
+                if (! slot->isModulatable (pi))
+                    continue;
+
+                const auto id = slot->getParamId (pi);
+                auto& e = snapshots[snapshotKey (slot->getUid(), id)];
+                e.slotUid = slot->getUid();
+                e.paramId = id;
+                e.values[(size_t) c->snapshot] = c->lastValues[(size_t) pi];
+                e.mask = (uint8_t) (e.mask | (1 << c->snapshot));
+            }
+
+            snapshotFilled[(size_t) c->snapshot] = true;
+            message = "Captured preset \"" + c->programName + "\" into snapshot " + juce::String::charToString ((juce::juce_wchar) ('A' + c->snapshot)) + ".";
+        }
+        else
+        {
+            message = "Couldn't read that preset.";
+        }
+
+        // Put the plug-in back exactly as it was, including the user's values
+        // for modulated parameters.
+        slot->setPluginState (c->savedState);
+        for (int i = 0; i < slot->getNumParams() && i < (int) c->savedBases.size(); ++i)
+            slot->getState (i).base.store (c->savedBases[(size_t) i]);
+
+        slot->requestResync();
+        slot->holdWrites.store (false);
+    }
+
+    rebuild();
+    refreshSlotParamNames();
+    setStatus (message);
+}
+
 void ModdMuddProcessor::recallSnapshot (int index)
 {
     if (! hasSnapshot (index))
@@ -1195,8 +1323,14 @@ void ModdMuddProcessor::processSlotEvents()
         bool latencyDirty = slot->consumeLatencyChanged();
 
         HostedSlot::Event e;
+        const bool capturing = programCapture != nullptr && programCapture->slotUid == slot->getUid();
+
         while (slot->popEvent (e))
         {
+            // Preset changes made while reading a preset aren't the user's.
+            if (capturing)
+                continue;
+
             const auto paramId = slot->getParamId (e.param);
             auto it = slotParamLookup.find (snapshotKey (slot->getUid(), paramId));
 

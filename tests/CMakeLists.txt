@@ -84,3 +84,15 @@ target_sources(ModdMuddUISnapshot PRIVATE UISnapshot.cpp)
 target_include_directories(ModdMuddUISnapshot PRIVATE $<TARGET_PROPERTY:ModdMuddFX,INCLUDE_DIRECTORIES>)
 target_compile_definitions(ModdMuddUISnapshot PRIVATE $<TARGET_PROPERTY:ModdMuddFX,COMPILE_DEFINITIONS>)
 target_link_libraries(ModdMuddUISnapshot PRIVATE ModdMuddFX)
+
+#==============================================================================
+# Processor-level test with a running message loop (preset capture etc.).
+juce_add_console_app(ModdMuddProcessorTest PRODUCT_NAME "ModdMuddProcessorTest")
+target_sources(ModdMuddProcessorTest PRIVATE ProcessorTest.cpp)
+target_include_directories(ModdMuddProcessorTest PRIVATE $<TARGET_PROPERTY:ModdMuddFX,INCLUDE_DIRECTORIES>)
+target_compile_definitions(ModdMuddProcessorTest PRIVATE $<TARGET_PROPERTY:ModdMuddFX,COMPILE_DEFINITIONS>)
+target_link_libraries(ModdMuddProcessorTest PRIVATE ModdMuddFX)
+add_dependencies(ModdMuddProcessorTest MuddTestGain_VST3)
+
+add_test(NAME ProcessorTest
+    COMMAND ModdMuddProcessorTest "$<GENEX_EVAL:$<TARGET_PROPERTY:MuddTestGain_VST3,JUCE_PLUGIN_ARTEFACT_FILE>>")

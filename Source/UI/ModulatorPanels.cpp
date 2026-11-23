@@ -616,7 +616,8 @@ BlendPanel::BlendPanel (ModdMuddProcessor& p)
     {
         auto& b = snapButtons[(size_t) i];
         b.setButtonText (names[i]);
-        b.setTooltip ("Click: capture the current plug-in settings (or recall if already captured). Right-click for options.");
+        b.setTooltip ("Click: capture the current plug-in settings (or recall if already captured). "
+                      "Right-click to capture one of the plug-in's own presets, recall or clear.");
         b.onClick = [this, i] { snapshotClicked (i, juce::ModifierKeys::currentModifiers.isPopupMenu()); };
         addAndMakeVisible (b);
     }
@@ -665,6 +666,37 @@ void BlendPanel::snapshotClicked (int index, bool popup)
 
     juce::PopupMenu m;
     m.addItem (1, "Capture current settings");
+
+    // The hosted plug-ins' own presets (programs), in groups of 40.
+    juce::PopupMenu presets;
+    const auto& slots = processor.getSlots();
+    for (int si = 0; si < (int) slots.size(); ++si)
+    {
+        auto* inst = slots[(size_t) si]->getInstance();
+        const int count = inst != nullptr ? juce::jmin (inst->getNumPrograms(), 1000) : 0;
+        if (count < 2)
+            continue;
+
+        juce::PopupMenu slotMenu, chunk;
+        for (int prog = 0; prog < count; ++prog)
+        {
+            auto name = inst->getProgramName (prog);
+            chunk.addItem (10000 + si * 1000 + prog, name.isNotEmpty() ? name : "Preset " + juce::String (prog + 1));
+
+            if ((prog + 1) % 40 == 0 || prog == count - 1)
+            {
+                if (count <= 40) slotMenu = chunk;
+                else slotMenu.addSubMenu (juce::String (prog / 40 * 40 + 1) + "-" + juce::String (prog + 1), chunk);
+                chunk = {};
+            }
+        }
+
+        if (slots.size() > 1) presets.addSubMenu (slots[(size_t) si]->getDisplayName(), slotMenu);
+        else                  presets = slotMenu;
+    }
+
+    m.addSubMenu ("Capture from plug-in preset", presets, presets.getNumItems() > 0 && ! processor.isCapturingProgram());
+    m.addSeparator();
     m.addItem (2, "Recall", has);
     m.addItem (3, "Clear", has);
 
@@ -675,6 +707,7 @@ void BlendPanel::snapshotClicked (int index, bool popup)
         if (r == 1) safe->processor.captureSnapshot (index);
         if (r == 2) safe->processor.recallSnapshot (index);
         if (r == 3) safe->processor.clearSnapshot (index);
+        if (r >= 10000) safe->processor.captureSnapshotFromProgram (index, (r - 10000) / 1000, (r - 10000) % 1000);
     });
 }
 

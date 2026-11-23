@@ -113,7 +113,7 @@ All produce one value per sub-block. All of them always run on the audio thread 
 | Follower ×2 | unipolar | Envelope follower: input, output or sidechain; peak or RMS; attack, release, gain, threshold, sensitivity (6–60 dB range), response curve, smoothing, invert. |
 | Shaper ×2 | unipolar | Drawn envelope generator: a multi-point curve (curved segments) played once per trigger, or looped. Triggers: note-on, an audio transient above a threshold (with 3 dB hysteresis and a 30 ms hold-off), transport start, or the Play button. Length in ms (10 ms–20 s) or musical divisions; a synced loop locks to the song position. Cross-modulation targets: time and depth. |
 
-The **preset blender** stores up to four snapshots (A–D) of every modulatable hosted parameter's base value. The blend position (X/Y) weights the corners bilinearly. Continuous parameters interpolate. Discrete parameters (switches, menus) switch to the nearest snapshot that holds them. Only parameters whose captured values differ are driven.
+The **preset blender** stores up to four snapshots (A–D) of every modulatable hosted parameter's base value. A snapshot can also be captured from one of the hosted plug-in's **own presets** (programs). ModdMudd pauses its writes to that plug-in, switches it to the preset, and reads the parameters once they settle (they arrive through the plug-in's controller a moment later). It then restores the plug-in's previous state, and the user's values for modulated parameters, and re-sends modulation. The blend position (X/Y) weights the corners bilinearly. Continuous parameters interpolate. Discrete parameters (switches, menus) switch to the nearest snapshot that holds them. Only parameters whose captured values differ are driven.
 
 ## Cross-modulation
 
@@ -178,5 +178,6 @@ The modulation panel snaps onto the hosted plug-in, so the two read as one windo
   - base-value restore when modulation is removed
   - missing-plug-in handling
   - MIDI to a hosted instrument
+- `ModdMuddProcessorTest`: drives the processor directly with a running message loop. It captures the test effect's "Quiet" and "Loud" presets into snapshots, checks the plug-in is restored afterwards, and checks the blend between them in the audio.
 - pluginval in CI (strictness 8) on both builds.
 - `ModdMuddUISnapshot`: development tool that renders the editor to PNG.

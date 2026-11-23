@@ -27,6 +27,7 @@
 - **Synced LFOs and randomizers stop locking to the bar grid** while their rate is cross-modulated. They free-run at the modulated rate instead.
 - **Envelope follower latency.** It reads the audio of the sub-block it is in, so modulation from it lags by up to one sub-block. In the Instrument build there is no audio input: use the Output source.
 - **Shapers play their whole curve on each trigger.** There's no sustain stage held while a note is down, and note-offs are ignored. In the FX build, audio triggering listens to the input. The Instrument build has no input, so it listens to its own output.
+- **Capturing from a plug-in preset** briefly switches the plug-in to that preset (a fraction of a second), so it can be heard if audio is playing. Plug-ins that don't publish their presets to the host (many keep them in their own browser) can't be captured this way. Capture the current settings instead.
 - **The preset blender stores base values**, i.e. what you set, not what modulation produced. Discrete parameters switch to the nearest snapshot. They don't interpolate.
 
 ## Not done yet

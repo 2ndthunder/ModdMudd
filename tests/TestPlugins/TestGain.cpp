@@ -35,10 +35,18 @@ public:
     bool acceptsMidi() const override                  { return false; }
     bool producesMidi() const override                 { return false; }
     double getTailLengthSeconds() const override       { return 0.0; }
-    int getNumPrograms() override                      { return 1; }
-    int getCurrentProgram() override                   { return 0; }
-    void setCurrentProgram (int) override              {}
-    const juce::String getProgramName (int) override   { return {}; }
+    // Factory presets, so the preset blender can capture from them.
+    int getNumPrograms() override                      { return 3; }
+    int getCurrentProgram() override                   { return currentProgram; }
+    const juce::String getProgramName (int i) override { return juce::StringArray { "Default", "Quiet", "Loud" }[i]; }
+
+    void setCurrentProgram (int i) override
+    {
+        currentProgram = juce::jlimit (0, 2, i);
+        const float gains[] { 0.5f, 0.1f, 0.9f };
+        gain->setValueNotifyingHost (gain->convertTo0to1 (gains[currentProgram]));
+        mode->setValueNotifyingHost (mode->convertTo0to1 ((float) currentProgram));
+    }
     void changeProgramName (int, const juce::String&) override {}
 
     void getStateInformation (juce::MemoryBlock& mb) override
@@ -61,6 +69,7 @@ public:
 private:
     juce::AudioParameterFloat* gain = nullptr;
     juce::AudioParameterChoice* mode = nullptr;
+    int currentProgram = 0;
 };
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() { return new TestGain(); }

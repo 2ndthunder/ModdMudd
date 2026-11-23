@@ -53,6 +53,15 @@ public:
     juce::MemoryBlock getPluginState() const;
     void setPluginState (const juce::MemoryBlock& data);
 
+    /** While set, ModdMudd doesn't write modulated values to this plug-in
+        (used while reading one of its presets). */
+    std::atomic<bool> holdWrites { false };
+
+    /** Asks the audio thread to re-send every modulated value (after the
+        plug-in's state was replaced underneath it). */
+    void requestResync() noexcept                              { resync.store (true); }
+    bool consumeResync() noexcept                              { return resync.exchange (false); }
+
     /** Saved base values restored after loading, keyed by parameter ID. */
     std::map<juce::String, float> pendingBases;
 
@@ -124,6 +133,7 @@ private:
     int hostedIns = 0, hostedOuts = 0;
     bool prepared = false;
     std::atomic<bool> latencyChanged { false };
+    std::atomic<bool> resync { false };
     bool lastNonRealtime = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (HostedSlot)
