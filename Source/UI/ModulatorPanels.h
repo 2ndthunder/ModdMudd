@@ -39,7 +39,9 @@ private:
 class WaveView : public juce::Component, public juce::SettableTooltipClient, public Refreshable
 {
 public:
-    WaveView (ModdMuddProcessor& p, int lfoIndex);
+    /** Shows an LFO's waveform (editable when its shape is Custom), or with
+        forShaper set, a Shaper's drawn envelope (always editable). */
+    WaveView (ModdMuddProcessor& p, int index, bool forShaper = false);
 
     void paint (juce::Graphics&) override;
     void mouseDown (const juce::MouseEvent&) override;
@@ -56,6 +58,7 @@ private:
 
     ModdMuddProcessor& processor;
     int lfo;
+    bool shaper;
     std::vector<WavePoint> points;
     std::vector<float> table;
     int dragIndex = -1;
@@ -184,6 +187,29 @@ private:
     ParamToggle invert;
     SourceChip chip;
     juce::Label sourceLabel, detectorLabel;
+};
+
+//==============================================================================
+/** A drawn envelope generator: the curve plays on a note, an audio
+    transient, transport start, the Play button, or loops. */
+class ShaperPanel : public juce::Component, public Refreshable
+{
+public:
+    ShaperPanel (ModdMuddProcessor& p, int index);
+    void resized() override;
+    void refresh() override;
+
+private:
+    ModdMuddProcessor& processor;
+    int index;
+    Section section, controls;
+    WaveView wave;
+    ParamChoice trigger, division;
+    Knob time, depth, threshold;
+    ParamToggle sync;
+    juce::TextButton play { "Play" };
+    SourceChip chip;
+    juce::Label triggerLabel;
 };
 
 } // namespace mm

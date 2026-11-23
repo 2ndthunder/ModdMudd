@@ -147,17 +147,29 @@ bool XYPadComponent::keyPressed (const juce::KeyPress& k)
 }
 
 //==============================================================================
-WaveView::WaveView (ModdMuddProcessor& p, int lfoIndex)
-    : processor (p), lfo (lfoIndex), table ((size_t) kLfoTableSize)
+WaveView::WaveView (ModdMuddProcessor& p, int index, bool forShaper)
+    : processor (p), lfo (index), shaper (forShaper), table ((size_t) kLfoTableSize)
 {
-    points = processor.getCustomWave (lfo);
+    points = shaper ? processor.getShaperCurve (lfo) : processor.getCustomWave (lfo);
     Lfo::buildCustomTable (points, table.data());
-    setTitle ("LFO " + juce::String (lfo + 1) + " waveform");
-    setTooltip ("Custom shape: drag points, double-click to add or remove, Alt-drag to bend a segment");
+
+    if (shaper)
+    {
+        setTitle ("Shaper " + juce::String (lfo + 1) + " envelope");
+        setTooltip ("Draw the envelope: drag points, double-click to add or remove, Alt-drag to bend a segment");
+    }
+    else
+    {
+        setTitle ("LFO " + juce::String (lfo + 1) + " waveform");
+        setTooltip ("Custom shape: drag points, double-click to add or remove, Alt-drag to bend a segment");
+    }
 }
 
 bool WaveView::isCustom() const
 {
+    if (shaper)
+        return true;
+
     return juce::roundToInt (processor.getValueTreeState().getRawParameterValue (ids::lfo (lfo, "shape"))->load())
                == (int) LfoShape::custom;
 }
@@ -186,29 +198,46 @@ void WaveView::paint (juce::Graphics& g)
 
     auto r = bounds.reduced (6.0f);
     g.setColour (p.outline.brighter (0.15f));
-    g.drawHorizontalLine ((int) r.getCentreY(), r.getX(), r.getRight());
+    // An envelope's zero is the bottom; an LFO's is the middle.
+    g.drawHorizontalLine ((int) (shaper ? r.getBottom() : r.getCentreY()), r.getX(), r.getRight());
 
-    const auto shape = (LfoShape) juce::roundToInt (processor.getValueTreeState().getRawParameterValue (ids::lfo (lfo, "shape"))->load());
+    const auto shape = shaper ? LfoShape::custom
+                              : (LfoShape) juce::roundToInt (processor.getValueTreeState().getRawParameterValue (ids::lfo (lfo, "shape"))->load());
 
     juce::Path path;
     const int n = juce::jmax (2, (int) r.getWidth());
     for (int i = 0; i <= n; ++i)
     {
         const double ph = (double) i / n;
-        const float v = Lfo::evaluate (shape, ph, table.data());
+        const float v = shaper ? Shaper::valueAt (table.data(), ph) * 2.0f - 1.0f
+                               : Lfo::evaluate (shape, ph, table.data());
         const float x = r.getX() + (float) ph * r.getWidth();
         const float y = r.getCentreY() - v * r.getHeight() * 0.5f;
         if (i == 0) path.startNewSubPath (x, y); else path.lineTo (x, y);
     }
 
+    if (shaper)
+    {
+        juce::Path fill (path);
+        fill.lineTo (r.getRight(), r.getBottom());
+        fill.lineTo (r.getX(), r.getBottom());
+        fill.closeSubPath();
+        g.setColour (p.active.withAlpha (0.18f));
+        g.fillPath (fill);
+    }
+
     g.setColour (p.active);
     g.strokePath (path, juce::PathStrokeType (2.0f));
 
-    // Play position
-    const float phase = processor.getEngine().lfoPhaseDisplay[(size_t) lfo].load (std::memory_order_relaxed);
-    const float px = r.getX() + phase * r.getWidth();
-    g.setColour (p.value);
-    g.drawVerticalLine ((int) px, r.getY(), r.getBottom());
+    // Play position (a shaper that isn't running has none)
+    const float phase = shaper ? processor.getEngine().shaperPhaseDisplay[(size_t) lfo].load (std::memory_order_relaxed)
+                               : processor.getEngine().lfoPhaseDisplay[(size_t) lfo].load (std::memory_order_relaxed);
+    if (phase >= 0.0f)
+    {
+        const float px = r.getX() + phase * r.getWidth();
+        g.setColour (p.value);
+        g.drawVerticalLine ((int) px, r.getY(), r.getBottom());
+    }
 
     if (shape == LfoShape::custom)
     {
@@ -226,7 +255,8 @@ void WaveView::paint (juce::Graphics& g)
 void WaveView::commit()
 {
     Lfo::buildCustomTable (points, table.data());
-    processor.setCustomWave (lfo, points);
+    if (shaper) processor.setShaperCurve (lfo, points);
+    else        processor.setCustomWave (lfo, points);
     repaint();
 }
 
@@ -696,7 +726,7 @@ void EnvPanel::Meter::paint (juce::Graphics& g)
 
 EnvPanel::EnvPanel (ModdMuddProcessor& p, int i)
     : processor (p), index (i),
-      section ("Envelope " + juce::String (i + 1)), controls ("Settings"),
+      section ("Follower " + juce::String (i + 1)), controls ("Settings"),
       source (p, ids::env (i, "source")), detector (p, ids::env (i, "detector")),
       attack (p, ids::env (i, "attack"), "Attack"),
       release (p, ids::env (i, "release"), "Release"),
@@ -752,6 +782,69 @@ void EnvPanel::resized()
 
     c.removeFromTop (6);
     layoutRow (c, { &attack, &release, &gain, &threshold, &sensitivity, &curve, &smooth, &depth });
+}
+
+//==============================================================================
+ShaperPanel::ShaperPanel (ModdMuddProcessor& p, int i)
+    : processor (p), index (i),
+      section ("Shaper " + juce::String (i + 1)), controls ("Settings"),
+      wave (p, i, true),
+      trigger (p, ids::shp (i, "trigger")), division (p, ids::shp (i, "div")),
+      time (p, ids::shp (i, "time"), "Time", shaperInternal (i, 0)),
+      depth (p, ids::shp (i, "depth"), "Depth", shaperInternal (i, 1)),
+      threshold (p, ids::shp (i, "threshold"), "Threshold"),
+      sync (p, ids::shp (i, "sync"), "Sync"),
+      chip (p, srcShaper0 + i)
+{
+    for (auto* c : std::initializer_list<juce::Component*> { &section, &controls, &wave, &trigger, &division, &time, &depth,
+                                                            &threshold, &sync, &play, &chip, &triggerLabel })
+        addAndMakeVisible (c);
+
+    setupLabel (triggerLabel, "Play on");
+    trigger.setTooltip ("Note: each note-on. Audio: a transient above the threshold. Transport: when playback starts. "
+                        "Loop: repeats continuously.");
+    threshold.slider.setTooltip ("Audio trigger level");
+    division.setTooltip ("Length of the envelope in musical time");
+    play.setTooltip ("Play the envelope now");
+    play.setTitle ("Play envelope");
+    play.onClick = [this] { processor.triggerShaper (index); };
+    refresh();
+}
+
+void ShaperPanel::refresh()
+{
+    auto& s = processor.getValueTreeState();
+    const bool synced = s.getRawParameterValue (ids::shp (index, "sync"))->load() >= 0.5f;
+    const auto mode = (ShaperTrigger) juce::roundToInt (s.getRawParameterValue (ids::shp (index, "trigger"))->load());
+
+    division.setVisible (synced);
+    time.setEnabled (! synced);
+    threshold.setEnabled (mode == ShaperTrigger::audio);
+}
+
+void ShaperPanel::resized()
+{
+    auto r = getLocalBounds();
+    auto left = r.removeFromLeft (juce::jlimit (170, 420, r.getWidth() * 2 / 5));
+    section.setBounds (left);
+    auto content = section.getContentBounds();
+    chip.setBounds (content.removeFromBottom (28));
+    content.removeFromBottom (4);
+    wave.setBounds (content);
+
+    r.removeFromLeft (6);
+    controls.setBounds (r);
+    auto c = controls.getContentBounds();
+
+    auto topRow = c.removeFromTop (24);
+    const bool roomy = topRow.getWidth() >= 400;
+    layoutFlex (topRow, { { &triggerLabel, roomy ? 54 : 0, 0 }, { &trigger, 104, 80 }, { &division, 80, 58 },
+                          { nullptr, 400, 0 }, { &play, 64, 48 } });
+
+    c.removeFromTop (6);
+    layoutFlex (c.removeFromBottom (24), { { &sync, 80, 62 } });
+
+    layoutRow (c, { &time, &depth, &threshold });
 }
 
 } // namespace mm

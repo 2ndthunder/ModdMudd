@@ -49,6 +49,7 @@ namespace ids
     inline juce::String lfo (int i, const char* what)  { return "lfo" + juce::String (i + 1) + "_" + what; }
     inline juce::String rnd (int i, const char* what)  { return "rnd" + juce::String (i + 1) + "_" + what; }
     inline juce::String env (int i, const char* what)  { return "env" + juce::String (i + 1) + "_" + what; }
+    inline juce::String shp (int i, const char* what)  { return "shp" + juce::String (i + 1) + "_" + what; }
 
     inline const juce::String xyX = "xyX", xyY = "xyY", xyCenterX = "xyCenterX", xyCenterY = "xyCenterY",
                               xyGlide = "xyGlide", xyBipolar = "xyBipolar",
@@ -80,7 +81,14 @@ struct ParameterRefs
         std::atomic<float>* smooth; std::atomic<float>* depth; std::atomic<float>* invert;
     };
 
+    struct Shaper
+    {
+        std::atomic<float>* trigger; std::atomic<float>* sync; std::atomic<float>* division; std::atomic<float>* time;
+        std::atomic<float>* depth; std::atomic<float>* threshold;
+    };
+
     std::array<Lfo, kNumLfos> lfo {};
+    std::array<Shaper, kNumShapers> shaper {};
     std::array<Random, kNumRandoms> random {};
     std::array<Env, kNumEnvs> env {};
     std::array<std::atomic<float>*, kNumMacros> macro {};

@@ -27,7 +27,7 @@ The x86_64 half of the macOS universal binary is built but has not been run.
 
 | Host | Hosted plug-ins | Result |
 |---|---|---|
-| JUCE 9.0.6 headless VST3 host (`ModdMuddHostTest`), Linux, macOS and Windows (CI) | MuddTestGain, MuddTestSynth (test plug-ins in this repo) | All 18 checks pass |
+| JUCE 9.0.6 headless VST3 host (`ModdMuddHostTest`), Linux, macOS and Windows (CI) | MuddTestGain, MuddTestSynth (test plug-ins in this repo) | All 19 checks pass (including a note-triggered Shaper) |
 
 ## DAWs
 

@@ -130,6 +130,9 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> attachment;
 };
 
+/** The pop-up list of one source's targets (depth and remove per target). */
+std::unique_ptr<juce::Component> createTargetList (ModdMuddProcessor& p, int source);
+
 //==============================================================================
 /** A modulation source handle: drag it onto a parameter, or click it and
     move a control in the hosted plug-in to assign by touch. Shows the
@@ -145,14 +148,22 @@ public:
     void mouseDown (const juce::MouseEvent&) override;
     void mouseDrag (const juce::MouseEvent&) override;
     void mouseUp (const juce::MouseEvent&) override;
+    bool keyPressed (const juce::KeyPress&) override;
 
     void refresh() override;
 
+    /** Opens the pop-up listing this source's targets. */
+    void showTargets();
+
 private:
+    juce::Rectangle<int> badgeArea() const;
+    int countTargets() const;
+
     ModdMuddProcessor& processor;
     int source;
     juce::String text;
     float shownValue = 0.0f;
+    int targetCount = 0;
     bool dragging = false;
 };
 

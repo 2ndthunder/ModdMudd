@@ -11,6 +11,7 @@ void ModEngine::prepare (double sr) noexcept
     for (auto& l : lfos)    l.prepare (sampleRate);
     for (auto& r : randoms) r.prepare (sampleRate);
     for (auto& e : envs)    e.prepare (sampleRate);
+    for (auto& sh : shapers) sh.prepare (sampleRate);
 
     reset();
 }
@@ -20,6 +21,7 @@ void ModEngine::reset() noexcept
     for (auto& l : lfos)    l.reset();
     for (auto& r : randoms) r.reset();
     for (auto& e : envs)    e.reset();
+    for (auto& sh : shapers) sh.reset();
 
     values.fill (0.0f);
     internalMod.fill (0.0f);
@@ -46,6 +48,18 @@ void ModEngine::feedEnvelope (int index, const float* const* channels, int numCh
         return;
 
     envs[(size_t) index].processAudio (channels, numChannels, numSamples, s, envGainModDb[(size_t) index]);
+}
+
+void ModEngine::feedShaper (int index, const float* const* channels, int numChannels, int numSamples, float thresholdDb) noexcept
+{
+    if (juce::isPositiveAndBelow (index, kNumShapers))
+        shapers[(size_t) index].feedAudio (channels, numChannels, numSamples, thresholdDb);
+}
+
+void ModEngine::triggerShaper (int index) noexcept
+{
+    if (juce::isPositiveAndBelow (index, kNumShapers))
+        shapers[(size_t) index].trigger();
 }
 
 //==============================================================================
@@ -95,10 +109,41 @@ float ModEngine::gatherInternal (int ip, const RoutingPlan& plan) noexcept
 
 //==============================================================================
 void ModEngine::runNode (int node, const EngineSettings& s, const TransportInfo& t, const RoutingPlan& plan,
-                         int numSamples, const std::array<const float*, kNumLfos>& tables) noexcept
+                         int numSamples, const std::array<const float*, kNumLfos>& tables,
+                         const std::array<const float*, kNumShapers>& shaperTables) noexcept
 {
     static const auto lfoRange    = ParamRanges::lfoRate();
     static const auto randomRange = ParamRanges::randomRate();
+    static const auto shaperRange = ParamRanges::shaperTime();
+
+    if (node >= nodeShaper0 && node < kNumNodes)
+    {
+        const int i = node - nodeShaper0;
+        const auto& ss = s.shaper[(size_t) i];
+
+        const float timeMod  = gatherInternal (shaperInternal (i, 0), plan);
+        const float depthMod = gatherInternal (shaperInternal (i, 1), plan);
+
+        double length;
+        if (ss.sync)
+        {
+            const double quarters = getDivisions()[(size_t) juce::jlimit (0, (int) getDivisions().size() - 1, ss.division)].quarters;
+            length = quarters * 60.0 / juce::jmax (1.0, t.bpm) * std::pow (2.0, (double) timeMod * 4.0);
+        }
+        else
+        {
+            const float norm = juce::jlimit (0.0f, 1.0f, shaperRange.convertTo0to1 (ss.timeMs) + timeMod);
+            length = shaperRange.convertFrom0to1 (norm) * 0.001;
+        }
+
+        const float depth = juce::jlimit (0.0f, 1.0f, ss.depth + depthMod);
+        values[(size_t) (srcShaper0 + i)] = shapers[(size_t) i].process (ss, t, numSamples, length, std::abs (timeMod) < 1.0e-6f,
+                                                                       depth, shaperTables[(size_t) i]);
+        shaperPhaseDisplay[(size_t) i].store (shapers[(size_t) i].isRunning() || ss.trigger == ShaperTrigger::loop
+                                                  ? (float) shapers[(size_t) i].getPhase() : -1.0f,
+                                              std::memory_order_relaxed);
+        return;
+    }
 
     if (node >= nodeLfo0 && node < nodeRandom0)
     {
@@ -175,7 +220,7 @@ void ModEngine::runNode (int node, const EngineSettings& s, const TransportInfo&
         xyXDisplay.store (xySmoothX, std::memory_order_relaxed);
         xyYDisplay.store (xySmoothY, std::memory_order_relaxed);
     }
-    else if (node >= nodeEnv0 && node < kNumNodes)
+    else if (node >= nodeEnv0 && node < nodeShaper0)
     {
         const int i = node - nodeEnv0;
         const auto& es = s.env[(size_t) i];
@@ -190,10 +235,11 @@ void ModEngine::runNode (int node, const EngineSettings& s, const TransportInfo&
 }
 
 void ModEngine::computeSubBlock (const EngineSettings& s, const TransportInfo& t, const RoutingPlan& plan,
-                                 int numSamples, const std::array<const float*, kNumLfos>& tables) noexcept
+                                 int numSamples, const std::array<const float*, kNumLfos>& tables,
+                                 const std::array<const float*, kNumShapers>& shaperTables) noexcept
 {
     for (int i = 0; i < kNumNodes; ++i)
-        runNode (plan.nodeOrder[(size_t) i], s, t, plan, numSamples, tables);
+        runNode (plan.nodeOrder[(size_t) i], s, t, plan, numSamples, tables, shaperTables);
 
     blendX = juce::jlimit (0.0f, 1.0f, s.blendX + gatherInternal (ipBlendX, plan));
     blendY = juce::jlimit (0.0f, 1.0f, s.blendY + gatherInternal (ipBlendY, plan));

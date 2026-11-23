@@ -109,7 +109,7 @@ int main (int argc, char* argv[])
 
     struct Shot { int module; const char* name; };
     const Shot shots[] { { mm::modLfo0, "lfo1" }, { mm::modRandom0, "rnd1" }, { mm::modMacros, "macros" }, { mm::modXy, "xy" },
-                         { mm::modBlend, "blend" }, { mm::modEnv0, "env1" }, { -1, "routing" } };
+                         { mm::modBlend, "blend" }, { mm::modEnv0, "follow1" }, { mm::modShaper0, "shaper1" }, { -1, "routing" } };
 
     for (int width : { mm::ModdMuddEditor::minPanelWidth, 1200 })
     {
@@ -122,6 +122,22 @@ int main (int argc, char* argv[])
 
             save (*editor, outDir.getChildFile (juce::String ("editor_") + juce::String (width) + "_" + shot.name + ".png"));
         }
+    }
+
+    // The pop-up list of LFO 1's targets, drawn with the editor's look.
+    {
+        auto list = mm::createTargetList (*proc, mm::srcLfo0);
+        list->setLookAndFeel (&editor->getLookAndFeel());
+        auto img = juce::Image (juce::Image::ARGB, list->getWidth(), list->getHeight(), true);
+        juce::Graphics g (img);
+        g.fillAll (juce::Colour (0xff34383e));
+        list->paintEntireComponent (g, true);
+        auto f = outDir.getChildFile ("targets_popup.png");
+        f.deleteFile();
+        juce::FileOutputStream out (f);
+        juce::PNGImageFormat().writeImageToStream (img, out);
+        std::printf ("wrote %s\n", f.getFullPathName().toRawUTF8());
+        list->setLookAndFeel (nullptr);
     }
 
     // A short chain, as a new user would build it.

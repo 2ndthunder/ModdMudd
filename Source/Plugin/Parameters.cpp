@@ -95,8 +95,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout (std::
 
     for (int i = 0; i < kNumEnvs; ++i)
     {
-        const auto n = "Env " + juce::String (i + 1) + " ";
-        auto group = std::make_unique<juce::AudioProcessorParameterGroup> ("env" + juce::String (i + 1), "Envelope " + juce::String (i + 1), "|");
+        const auto n = "Follower " + juce::String (i + 1) + " ";
+        auto group = std::make_unique<juce::AudioProcessorParameterGroup> ("env" + juce::String (i + 1), "Follower " + juce::String (i + 1), "|");
         group->addChild (std::make_unique<APC> (pid (ids::env (i, "source")), n + "Source", envSources, 0));
         group->addChild (std::make_unique<APC> (pid (ids::env (i, "detector")), n + "Detector", detectors, 0));
         group->addChild (std::make_unique<APF> (pid (ids::env (i, "attack")), n + "Attack", ParamRanges::timeMs (0.1f, 1000.0f, 20.0f), 10.0f, withLabel ("ms")));
@@ -108,6 +108,22 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout (std::
         group->addChild (std::make_unique<APF> (pid (ids::env (i, "smooth")), n + "Smoothing", ParamRanges::timeMs (0.1f, 1000.0f, 30.0f), 10.0f, withLabel ("ms")));
         group->addChild (std::make_unique<APF> (pid (ids::env (i, "depth")), n + "Depth", juce::NormalisableRange<float> (0.0f, 1.0f), 1.0f, percent()));
         group->addChild (std::make_unique<APB> (pid (ids::env (i, "invert")), n + "Invert", false));
+        layout.add (std::move (group));
+    }
+
+    // Shapers (drawn envelope generators)
+    const juce::StringArray triggers { "Note", "Audio", "Transport", "Loop" };
+
+    for (int i = 0; i < kNumShapers; ++i)
+    {
+        const auto n = "Shaper " + juce::String (i + 1) + " ";
+        auto group = std::make_unique<juce::AudioProcessorParameterGroup> ("shp" + juce::String (i + 1), "Shaper " + juce::String (i + 1), "|");
+        group->addChild (std::make_unique<APC> (pid (ids::shp (i, "trigger")), n + "Trigger", triggers, 0));
+        group->addChild (std::make_unique<APB> (pid (ids::shp (i, "sync")), n + "Sync", false));
+        group->addChild (std::make_unique<APC> (pid (ids::shp (i, "div")), n + "Length", getDivisionNames(), 3));
+        group->addChild (std::make_unique<APF> (pid (ids::shp (i, "time")), n + "Time", ParamRanges::shaperTime(), 1000.0f, withLabel ("ms")));
+        group->addChild (std::make_unique<APF> (pid (ids::shp (i, "depth")), n + "Depth", juce::NormalisableRange<float> (0.0f, 1.0f), 1.0f, percent()));
+        group->addChild (std::make_unique<APF> (pid (ids::shp (i, "threshold")), n + "Threshold", juce::NormalisableRange<float> (-60.0f, 0.0f), -24.0f, withLabel ("dB")));
         layout.add (std::move (group));
     }
 
@@ -172,6 +188,13 @@ void ParameterRefs::bind (juce::AudioProcessorValueTreeState& s)
         e.depth = get (ids::env (i, "depth")); e.invert = get (ids::env (i, "invert"));
     }
 
+    for (int i = 0; i < kNumShapers; ++i)
+    {
+        auto& sh = shaper[(size_t) i];
+        sh.trigger = get (ids::shp (i, "trigger")); sh.sync = get (ids::shp (i, "sync")); sh.division = get (ids::shp (i, "div"));
+        sh.time = get (ids::shp (i, "time")); sh.depth = get (ids::shp (i, "depth")); sh.threshold = get (ids::shp (i, "threshold"));
+    }
+
     for (int i = 0; i < kNumMacros; ++i)
         macro[(size_t) i] = get (ids::macro (i));
 
@@ -232,6 +255,18 @@ void ParameterRefs::fill (EngineSettings& s) const noexcept
         o.smoothMs = ld (r.smooth);
         o.depth = ld (r.depth);
         o.invert = on (r.invert);
+    }
+
+    for (int i = 0; i < kNumShapers; ++i)
+    {
+        auto& r = shaper[(size_t) i];
+        auto& o = s.shaper[(size_t) i];
+        o.trigger = (ShaperTrigger) juce::jlimit (0, 3, ch (r.trigger));
+        o.sync = on (r.sync);
+        o.division = ch (r.division);
+        o.timeMs = ld (r.time);
+        o.depth = ld (r.depth);
+        o.thresholdDb = ld (r.threshold);
     }
 
     for (int i = 0; i < kNumMacros; ++i)

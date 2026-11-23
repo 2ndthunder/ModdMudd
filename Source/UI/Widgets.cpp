@@ -1,4 +1,5 @@
 #include "Widgets.h"
+#include "MatrixPanel.h"
 
 namespace mm
 {
@@ -284,23 +285,211 @@ ParamChoice::ParamChoice (ModdMuddProcessor& p, const juce::String& id)
 }
 
 //==============================================================================
+//==============================================================================
+/** The targets of one source, with depth and remove, shown in a pop-up from
+    the source's handle. */
+class TargetList final : public juce::Component,
+                         private juce::ChangeListener
+{
+public:
+    TargetList (ModdMuddProcessor& p, int src) : processor (p), source (src)
+    {
+        title.setText (getSourceName (src) + " targets", juce::dontSendNotification);
+        title.setFont (MuddLookAndFeel::font (13.0f, true));
+        addAndMakeVisible (title);
+
+        empty.setText ("No targets yet. Drag the handle onto a parameter, or click it and move a control in the plug-in.",
+                       juce::dontSendNotification);
+        empty.setFont (MuddLookAndFeel::font (12.5f));
+        empty.setJustificationType (juce::Justification::centredLeft);
+        addChildComponent (empty);
+
+        rebuild();
+        const int rows = juce::jlimit (1, 8, (int) ids.size());
+        setSize (400, 30 + rows * 30 + 8);
+        processor.addChangeListener (this);
+    }
+
+    ~TargetList() override  { processor.removeChangeListener (this); }
+
+    void resized() override
+    {
+        auto r = getLocalBounds().reduced (8, 4);
+        title.setBounds (r.removeFromTop (24));
+        empty.setBounds (r);
+
+        for (auto* row : rows)
+            row->setBounds (r.removeFromTop (30));
+    }
+
+private:
+    struct Row final : juce::Component
+    {
+        Row (ModdMuddProcessor& p, int connectionId) : processor (p), id (connectionId)
+        {
+            name.setFont (MuddLookAndFeel::font (12.5f));
+            name.setMinimumHorizontalScale (0.7f);
+            depth.setSliderStyle (juce::Slider::LinearHorizontal);
+            depth.setTextBoxStyle (juce::Slider::TextBoxRight, false, 44, 18);
+            depth.setRange (-1.0, 1.0, 0.01);
+            depth.setTitle ("Depth");
+            depth.onDragEnd = [this] { push(); };
+            depth.onValueChange = [this] { if (! depth.isMouseButtonDown()) push(); };
+            remove.setButtonText ("X");
+            remove.setTitle ("Remove target");
+            remove.onClick = [this]
+            {
+                juce::WeakReference<ModdMuddProcessor> weak (&processor);
+                const int cid = id;
+                juce::MessageManager::callAsync ([weak, cid] { if (auto* proc = weak.get()) proc->removeConnection (cid); });
+            };
+
+            addAndMakeVisible (name);
+            addAndMakeVisible (depth);
+            addAndMakeVisible (remove);
+            update();
+        }
+
+        void update()
+        {
+            if (const auto* c = processor.getMatrix().find (id))
+            {
+                name.setText (describeDestination (processor, c->dest), juce::dontSendNotification);
+                name.setTooltip (name.getText());
+                if (! depth.isMouseButtonDown())
+                    depth.setValue (c->depth, juce::dontSendNotification);
+            }
+        }
+
+        void push()
+        {
+            if (const auto* existing = processor.getMatrix().find (id))
+            {
+                auto c = *existing;
+                c.depth = (float) depth.getValue();
+                processor.updateConnection (c);
+            }
+        }
+
+        void resized() override
+        {
+            auto r = getLocalBounds().reduced (0, 3);
+            remove.setBounds (r.removeFromRight (26));
+            r.removeFromRight (4);
+            depth.setBounds (r.removeFromRight (150));
+            name.setBounds (r);
+        }
+
+        ModdMuddProcessor& processor;
+        const int id;
+        juce::Label name;
+        juce::Slider depth;
+        juce::TextButton remove;
+    };
+
+    void changeListenerCallback (juce::ChangeBroadcaster*) override   { rebuild(); }
+
+    void rebuild()
+    {
+        std::vector<int> now;
+        for (auto& c : processor.getMatrix().getConnections())
+            if (c.source == source)
+                now.push_back (c.id);
+
+        if (now != ids)
+        {
+            ids = now;
+            rows.clear();
+            for (int id : ids)
+                if ((int) rows.size() < 8)
+                    addAndMakeVisible (rows.add (new Row (processor, id)));
+
+            resized();
+        }
+        else
+        {
+            for (auto* row : rows)
+                row->update();
+        }
+
+        empty.setVisible (ids.empty());
+    }
+
+    ModdMuddProcessor& processor;
+    int source;
+    juce::Label title, empty;
+    juce::OwnedArray<Row> rows;
+    std::vector<int> ids;
+};
+
+std::unique_ptr<juce::Component> createTargetList (ModdMuddProcessor& p, int source)
+{
+    return std::make_unique<TargetList> (p, source);
+}
+
+//==============================================================================
 SourceChip::SourceChip (ModdMuddProcessor& p, int src, const juce::String& t)
     : processor (p), source (src), text (t.isNotEmpty() ? t : getSourceName (src))
 {
-    setTooltip ("Drag onto a parameter to modulate it, or click and then move a control in the plug-in");
+    setTooltip ("Drag onto a parameter to modulate it, or click and then move a control in the plug-in. "
+                "Click the number to see and adjust this source's targets.");
     setTitle (getSourceName (src) + " source");
+    setDescription ("Space: assign by touch. Enter: show targets.");
+    targetCount = countTargets();
     setWantsKeyboardFocus (true);
     setMouseCursor (juce::MouseCursor::DraggingHandCursor);
+}
+
+int SourceChip::countTargets() const
+{
+    int n = 0;
+    for (auto& c : processor.getMatrix().getConnections())
+        n += c.source == source ? 1 : 0;
+    return n;
+}
+
+juce::Rectangle<int> SourceChip::badgeArea() const
+{
+    return getLocalBounds().removeFromRight (24).reduced (2, 4).withTrimmedBottom (2);
 }
 
 void SourceChip::refresh()
 {
     const float v = processor.getEngine().sourceDisplay[(size_t) source].load (std::memory_order_relaxed);
-    if (std::abs (v - shownValue) > 0.002f || processor.getArmedSource() == source)
+    const int count = countTargets();
+
+    if (std::abs (v - shownValue) > 0.002f || processor.getArmedSource() == source || count != targetCount)
     {
         shownValue = v;
+        targetCount = count;
         repaint();
     }
+}
+
+void SourceChip::showTargets()
+{
+    auto* top = getTopLevelComponent();
+    auto list = createTargetList (processor, source);
+    juce::CallOutBox::launchAsynchronously (std::move (list), top->getLocalArea (this, getLocalBounds()), top);
+}
+
+bool SourceChip::keyPressed (const juce::KeyPress& k)
+{
+    if (k == juce::KeyPress::returnKey)
+    {
+        showTargets();
+        return true;
+    }
+
+    if (k == juce::KeyPress::spaceKey)
+    {
+        if (processor.getArmedSource() == source) processor.disarmAssign();
+        else                                      processor.armAssign (source);
+        repaint();
+        return true;
+    }
+
+    return false;
 }
 
 void SourceChip::paint (juce::Graphics& g)
@@ -339,9 +528,22 @@ void SourceChip::paint (juce::Graphics& g)
         g.fillRect (bar.withWidth (bar.getWidth() * juce::jlimit (0.0f, 1.0f, v)));
     }
 
+    // Number of targets; click it to see and adjust them.
+    auto textArea = r.toNearestInt().withTrimmedRight (4);
+    if (targetCount > 0 && getWidth() >= 70)
+    {
+        const auto badge = badgeArea().toFloat();
+        g.setColour (p.value);
+        g.fillRoundedRectangle (badge, badge.getHeight() * 0.5f);
+        g.setColour (juce::Colours::black);
+        g.setFont (MuddLookAndFeel::font (11.0f, true));
+        g.drawText (juce::String (targetCount), badge, juce::Justification::centred);
+        textArea = textArea.withRight (badgeArea().getX() - 2);
+    }
+
     g.setColour (p.text);
     g.setFont (MuddLookAndFeel::font (12.0f, true));
-    g.drawFittedText (armed ? "Move a control..." : text, r.toNearestInt().withTrimmedRight (4), juce::Justification::centredLeft, 1);
+    g.drawFittedText (armed ? "Move a control..." : text, textArea, juce::Justification::centredLeft, 1);
 }
 
 void SourceChip::mouseDown (const juce::MouseEvent&)
@@ -369,7 +571,8 @@ void SourceChip::mouseUp (const juce::MouseEvent& e)
         juce::PopupMenu m;
         m.addSectionHeader (getSourceName (source));
         m.addItem (1, "Assign by touch");
-        m.addItem (2, "Remove all connections from " + getSourceName (source));
+        m.addItem (3, "Show targets (" + juce::String (targetCount) + ")");
+        m.addItem (2, "Remove all connections from " + getSourceName (source), targetCount > 0);
 
         juce::Component::SafePointer<SourceChip> safe (this);
         m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this), [safe] (int r)
@@ -377,7 +580,14 @@ void SourceChip::mouseUp (const juce::MouseEvent& e)
             if (safe == nullptr) return;
             if (r == 1) safe->processor.armAssign (safe->source);
             if (r == 2) safe->processor.removeConnectionsFrom (safe->source);
+            if (r == 3) safe->showTargets();
         });
+        return;
+    }
+
+    if (targetCount > 0 && getWidth() >= 70 && badgeArea().contains (e.getPosition()))
+    {
+        showTargets();
         return;
     }
 

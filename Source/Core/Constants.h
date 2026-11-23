@@ -12,7 +12,8 @@ namespace mm
 inline constexpr int kNumLfos           = 4;
 inline constexpr int kNumRandoms        = 2;
 inline constexpr int kNumMacros         = 8;
-inline constexpr int kNumEnvs           = 2;
+inline constexpr int kNumEnvs           = 2;    // envelope followers
+inline constexpr int kNumShapers        = 2;    // drawn envelope generators
 inline constexpr int kNumSlotParams     = 256;  // DAW-visible remappable parameters
 inline constexpr int kMaxHostedPlugins  = 4;
 inline constexpr int kRandomLanes       = 8;    // independent random streams per randomizer
@@ -31,7 +32,8 @@ enum SourceIndex : int
     srcXyX     = srcMacro0 + kNumMacros,
     srcXyY,
     srcEnv0,
-    kNumSources = srcEnv0 + kNumEnvs
+    srcShaper0 = srcEnv0 + kNumEnvs,      // added later: appended so saved IDs stay valid
+    kNumSources = srcShaper0 + kNumShapers
 };
 
 //==============================================================================
@@ -44,13 +46,15 @@ enum NodeIndex : int
     nodeMacro0  = nodeRandom0 + kNumRandoms,
     nodeXy      = nodeMacro0 + kNumMacros,
     nodeEnv0,
-    kNumNodes = nodeEnv0 + kNumEnvs
+    nodeShaper0 = nodeEnv0 + kNumEnvs,
+    kNumNodes = nodeShaper0 + kNumShapers
 };
 
 constexpr int nodeForSource (int source) noexcept
 {
     if (source < srcXyX)            return source;          // LFO, random and macro map 1:1
     if (source == srcXyX || source == srcXyY) return nodeXy;
+    if (source >= srcShaper0)       return nodeShaper0 + (source - srcShaper0);
     return nodeEnv0 + (source - srcEnv0);
 }
 
@@ -67,12 +71,14 @@ enum InternalParam : int
     ipXyY,
     ipBlendX,
     ipBlendY,
-    kNumInternalParams
+    ipShaperTime0,                                 // per shaper: time, depth (appended)
+    kNumInternalParams = ipShaperTime0 + kNumShapers * 2
 };
 
 constexpr int lfoInternal (int lfo, int which) noexcept     { return ipLfoRate0 + lfo * 3 + which; }    // 0 rate, 1 depth, 2 phase
 constexpr int randomInternal (int r, int which) noexcept    { return ipRandomRate0 + r * 2 + which; }   // 0 rate, 1 depth
 constexpr int envInternal (int e, int which) noexcept       { return ipEnvGain0 + e * 2 + which; }      // 0 gain, 1 depth
+constexpr int shaperInternal (int sh, int which) noexcept   { return ipShaperTime0 + sh * 2 + which; }  // 0 time, 1 depth
 
 /** The node whose behaviour an internal parameter changes, or -1 for the blender. */
 constexpr int ownerNodeForInternal (int ip) noexcept
@@ -82,7 +88,8 @@ constexpr int ownerNodeForInternal (int ip) noexcept
     if (ip < ipMacroAmount0) return nodeEnv0 + (ip - ipEnvGain0) / 2;
     if (ip < ipXyX)          return nodeMacro0 + (ip - ipMacroAmount0);
     if (ip == ipXyX || ip == ipXyY) return nodeXy;
-    return -1;
+    if (ip >= ipShaperTime0) return nodeShaper0 + (ip - ipShaperTime0) / 2;
+    return -1;   // blender
 }
 
 //==============================================================================
@@ -96,7 +103,8 @@ enum ModuleId : int
     modXy,
     modBlend,
     modEnv0,
-    kNumModules = modEnv0 + kNumEnvs
+    modShaper0 = modEnv0 + kNumEnvs,
+    kNumModules = modShaper0 + kNumShapers
 };
 
 inline juce::String getModuleName (int m)
@@ -106,7 +114,8 @@ inline juce::String getModuleName (int m)
     if (m == modMacros)                    return "Macros";
     if (m == modXy)                        return "XY Pad";
     if (m == modBlend)                     return "Preset Blender";
-    if (m >= modEnv0 && m < kNumModules)   return "Envelope " + juce::String (m - modEnv0 + 1);
+    if (m >= modEnv0 && m < modShaper0)    return "Follower " + juce::String (m - modEnv0 + 1);
+    if (m >= modShaper0 && m < kNumModules) return "Shaper " + juce::String (m - modShaper0 + 1);
     return {};
 }
 
@@ -117,7 +126,21 @@ inline juce::String getModuleTabName (int m)
     if (m == modMacros)                    return "MACRO";
     if (m == modXy)                        return "XY";
     if (m == modBlend)                     return "BLEND";
-    if (m >= modEnv0 && m < kNumModules)   return "ENV " + juce::String (m - modEnv0 + 1);
+    if (m >= modEnv0 && m < modShaper0)    return "FOLLOW " + juce::String (m - modEnv0 + 1);
+    if (m >= modShaper0 && m < kNumModules) return "SHAPE " + juce::String (m - modShaper0 + 1);
+    return {};
+}
+
+/** Very short names for tabs when the chain is long and the window narrow. */
+inline juce::String getModuleShortName (int m)
+{
+    if (m >= modLfo0 && m < modRandom0)    return "L" + juce::String (m - modLfo0 + 1);
+    if (m >= modRandom0 && m < modMacros)  return "R" + juce::String (m - modRandom0 + 1);
+    if (m == modMacros)                    return "MAC";
+    if (m == modXy)                        return "XY";
+    if (m == modBlend)                     return "BLD";
+    if (m >= modEnv0 && m < modShaper0)    return "F" + juce::String (m - modEnv0 + 1);
+    if (m >= modShaper0 && m < kNumModules) return "S" + juce::String (m - modShaper0 + 1);
     return {};
 }
 
@@ -127,7 +150,8 @@ inline bool moduleOwnsSource (int m, int source)
     if (m >= modRandom0 && m < modMacros)  return source == srcRandom0 + (m - modRandom0);
     if (m == modMacros)                    return source >= srcMacro0 && source < srcXyX;
     if (m == modXy)                        return source == srcXyX || source == srcXyY;
-    if (m >= modEnv0 && m < kNumModules)   return source == srcEnv0 + (m - modEnv0);
+    if (m >= modEnv0 && m < modShaper0)    return source == srcEnv0 + (m - modEnv0);
+    if (m >= modShaper0 && m < kNumModules) return source == srcShaper0 + (m - modShaper0);
     return false;
 }
 
@@ -157,6 +181,8 @@ enum class LfoShape : int { sine = 0, triangle, square, saw, reverseSaw, custom,
 enum class LfoRetrigger : int { free = 0, transport, note };
 
 enum class EnvSource : int { input = 0, output, sidechain };
+
+enum class ShaperTrigger : int { note = 0, audio, transport, loop };
 
 enum class EnvDetector : int { peak = 0, rms };
 
@@ -195,7 +221,8 @@ inline juce::String getSourceName (int source)
     if (source >= srcMacro0 && source < srcXyX)      return "Macro " + juce::String (source - srcMacro0 + 1);
     if (source == srcXyX)                            return "XY X";
     if (source == srcXyY)                            return "XY Y";
-    if (source >= srcEnv0 && source < kNumSources)   return "Env " + juce::String (source - srcEnv0 + 1);
+    if (source >= srcEnv0 && source < srcShaper0)    return "Follow " + juce::String (source - srcEnv0 + 1);
+    if (source >= srcShaper0 && source < kNumSources) return "Shaper " + juce::String (source - srcShaper0 + 1);
     return {};
 }
 
@@ -215,13 +242,15 @@ inline juce::String getInternalParamName (int ip)
     if (ip < ipMacroAmount0)
     {
         const int e = (ip - ipEnvGain0) / 2, which = (ip - ipEnvGain0) % 2;
-        return "Env " + juce::String (e + 1) + (which == 0 ? " Gain" : " Depth");
+        return "Follow " + juce::String (e + 1) + (which == 0 ? " Gain" : " Depth");
     }
     if (ip < ipXyX)    return "Macro " + juce::String (ip - ipMacroAmount0 + 1) + " Amount";
     if (ip == ipXyX)   return "XY X";
     if (ip == ipXyY)   return "XY Y";
     if (ip == ipBlendX) return "Blend X";
     if (ip == ipBlendY) return "Blend Y";
+    if (ip >= ipShaperTime0 && ip < kNumInternalParams)
+        return "Shaper " + juce::String ((ip - ipShaperTime0) / 2 + 1) + ((ip - ipShaperTime0) % 2 == 0 ? " Time" : " Depth");
     return {};
 }
 

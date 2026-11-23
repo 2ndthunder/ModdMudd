@@ -70,7 +70,7 @@ static String paramIdFor (AudioPluginInstance& p, const String& name)
 }
 
 static ValueTree makeState (const PluginDescription& hostedDesc, const String& paramId, bool withModulation,
-                            const String& build)
+                            const String& build, int source = 0, float depth = 0.5f)
 {
     ValueTree root ("ModdMudd");
     root.setProperty ("version", 1, nullptr);
@@ -88,11 +88,11 @@ static ValueTree makeState (const PluginDescription& hostedDesc, const String& p
     if (withModulation)
     {
         ValueTree c ("Conn");
-        c.setProperty ("source", 0, nullptr);           // LFO 1 (1 Hz sine by default)
+        c.setProperty ("source", source, nullptr);      // default: LFO 1 (1 Hz sine)
         c.setProperty ("internal", false, nullptr);
         c.setProperty ("slot", "test-slot", nullptr);
         c.setProperty ("param", paramId, nullptr);
-        c.setProperty ("depth", 0.5f, nullptr);
+        c.setProperty ("depth", depth, nullptr);
         matrix.appendChild (c, nullptr);
 
         ValueTree d ("Dest");
@@ -369,6 +369,31 @@ int main (int argc, char* argv[])
         check (energy / blocks > 0.05, "MIDI reaches the hosted instrument and it makes sound");
         check (peakFirstHalf > peakSecondHalf + 0.1f,
                "LFO modulates the instrument's level (" + String (peakFirstHalf, 2) + " vs " + String (peakSecondHalf, 2) + ")");
+
+        // Shaper 1 (source 18), note-triggered: its default curve rises in
+        // 60 ms and falls back over a second. Depth -0.8 against the synth's
+        // level of 0.8 ducks the note at the start and lets it return.
+        setState (*inst.instance, makeState (synth.description, levelId, true, "instrument", 18, -0.8f));
+
+        float early = 0.0f, late = 0.0f;
+        for (int b = 0; b < blocks; ++b)
+        {
+            MidiBuffer midi;
+            if (b == 0)
+                midi.addEvent (MidiMessage::noteOn (1, 60, (uint8) 100), 0);
+
+            buffer.clear();
+            inst.instance->processBlock (buffer, midi);
+            const float peak = buffer.getMagnitude (0, 0, blockSize);
+            const double ms = b * blockSize * 1000.0 / sampleRate;
+
+            if (ms > 50.0 && ms < 75.0)   early = jmax (early, peak);
+            if (ms > 900.0)               late = jmax (late, peak);
+        }
+
+        check (early < 0.2f && late > 0.6f,
+               "a note-triggered Shaper envelope modulates the instrument (" + String (early, 2) + " near the peak, "
+                   + String (late, 2) + " at the end)");
 
         inst.instance->releaseResources();
     }

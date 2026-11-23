@@ -34,6 +34,7 @@ struct RtState
     std::vector<std::pair<int, int>> restore;              // (slot, param) no longer driven
     std::array<std::pair<int, int>, kNumSlotParams> slotMap; // DAW slot -> (slot, param)
     std::array<std::vector<float>, kNumLfos> lfoTables;
+    std::array<std::vector<float>, kNumShapers> shaperTables;
     std::array<uint32_t, kNumRandoms> seeds {};
     int subBlock = kDefaultSubBlock;
 };
@@ -134,6 +135,11 @@ public:
     std::vector<WavePoint> getCustomWave (int lfo) const;
     void setCustomWave (int lfo, std::vector<WavePoint> points);
 
+    std::vector<WavePoint> getShaperCurve (int shaper) const;
+    void setShaperCurve (int shaper, std::vector<WavePoint> points);
+    /** Plays a shaper's curve now (audition). Any thread. */
+    void triggerShaper (int shaper)               { engine.triggerShaper (shaper); }
+
     uint32_t getRandomSeed (int index) const;
     void setRandomSeed (int index, uint32_t seed);
 
@@ -212,6 +218,7 @@ private:
     std::map<juce::String, SnapshotEntry> snapshots;
     std::array<bool, kNumSnapshots> snapshotFilled {};
     std::array<std::vector<WavePoint>, kNumLfos> customWaves;
+    std::array<std::vector<WavePoint>, kNumShapers> shaperCurves;
     std::array<uint32_t, kNumRandoms> randomSeeds {};
     std::array<SlotMapEntry, kNumSlotParams> slotMap;
     std::map<juce::String, std::pair<juce::String, juce::String>> previousTargets; // key -> (slot uid, param id)

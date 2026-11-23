@@ -3,6 +3,7 @@
 #include "Lfo.h"
 #include "Randomizer.h"
 #include "EnvelopeFollower.h"
+#include "Shaper.h"
 
 namespace mm
 {
@@ -23,6 +24,7 @@ struct EngineSettings
     std::array<float, kNumMacros>           macro {};
     XYSettings                              xy;
     std::array<EnvSettings, kNumEnvs>       env;
+    std::array<ShaperSettings, kNumShapers> shaper;
     bool  blendEnabled = false;
     float blendX = 0.0f, blendY = 0.0f;
 };
@@ -42,10 +44,17 @@ public:
     void feedEnvelope (int index, const float* const* channels, int numChannels, int numSamples,
                        const EnvSettings& s) noexcept;
 
+    /** Feeds audio to a shaper's transient detector (audio trigger mode). */
+    void feedShaper (int index, const float* const* channels, int numChannels, int numSamples, float thresholdDb) noexcept;
+
+    /** Starts a shaper from the editor. Any thread. */
+    void triggerShaper (int index) noexcept;
+
     /** Computes every source value for the start of this sub-block and
         advances the modulators by numSamples. */
     void computeSubBlock (const EngineSettings& s, const TransportInfo& t, const RoutingPlan& plan,
-                          int numSamples, const std::array<const float*, kNumLfos>& customTables) noexcept;
+                          int numSamples, const std::array<const float*, kNumLfos>& customTables,
+                          const std::array<const float*, kNumShapers>& shaperTables = {}) noexcept;
 
     float getSourceValue (int source, int lane = 0) const noexcept;
     bool  isSourceBipolar (int source) const noexcept;
@@ -74,10 +83,12 @@ public:
     std::array<std::atomic<float>, kNumEnvs>    envLevelDisplay {};
     std::atomic<float> blendXDisplay { 0.0f }, blendYDisplay { 0.0f };
     std::atomic<float> xyXDisplay { 0.5f }, xyYDisplay { 0.5f };
+    std::array<std::atomic<float>, kNumShapers> shaperPhaseDisplay {};
 
 private:
     void runNode (int node, const EngineSettings& s, const TransportInfo& t, const RoutingPlan& plan,
-                  int numSamples, const std::array<const float*, kNumLfos>& tables) noexcept;
+                  int numSamples, const std::array<const float*, kNumLfos>& tables,
+                  const std::array<const float*, kNumShapers>& shaperTables) noexcept;
     float gatherInternal (int ip, const RoutingPlan& plan) noexcept;
 
     double sampleRate = 44100.0;
@@ -85,6 +96,7 @@ private:
     std::array<Lfo, kNumLfos> lfos;
     std::array<Randomizer, kNumRandoms> randoms;
     std::array<EnvelopeFollower, kNumEnvs> envs;
+    std::array<Shaper, kNumShapers> shapers;
 
     std::array<float, kNumSources> values {};
     std::array<float, kNumInternalParams> internalMod {};

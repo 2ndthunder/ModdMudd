@@ -110,7 +110,8 @@ All produce one value per sub-block. All of them always run on the audio thread 
 | Random ×2 | bipolar | smooth (cosine) or stepped with glide; probability; seeded. Values are a pure function of seed, cycle and lane, so a synced randomizer repeats exactly with the song position. 8 independent lanes give each destination its own stream ("Independent"). |
 | Macro ×8 | unipolar | DAW-automatable, MIDI-learnable, lightly smoothed. |
 | XY pad | X and Y | glide; configurable centre; output relative to the centre (bipolar) or 0..1. |
-| Envelope ×2 | unipolar | input, output or sidechain; peak or RMS; attack, release, gain, threshold, sensitivity (6–60 dB range), response curve, smoothing, invert. |
+| Follower ×2 | unipolar | Envelope follower: input, output or sidechain; peak or RMS; attack, release, gain, threshold, sensitivity (6–60 dB range), response curve, smoothing, invert. |
+| Shaper ×2 | unipolar | Drawn envelope generator: a multi-point curve (curved segments) played once per trigger, or looped. Triggers: note-on, an audio transient above a threshold (with 3 dB hysteresis and a 30 ms hold-off), transport start, or the Play button. Length in ms (10 ms–20 s) or musical divisions; a synced loop locks to the song position. Cross-modulation targets: time and depth. |
 
 The **preset blender** stores up to four snapshots (A–D) of every modulatable hosted parameter's base value. The blend position (X/Y) weights the corners bilinearly. Continuous parameters interpolate. Discrete parameters (switches, menus) switch to the nearest snapshot that holds them. Only parameters whose captured values differ are driven.
 
@@ -158,6 +159,7 @@ The modulation panel snaps onto the hosted plug-in, so the two read as one windo
 - If the plug-in's window can be resized, resizing ModdMudd's window resizes the plug-in (within its own limits), and the panel follows. If it can't, ModdMudd's window takes the plug-in's fixed size.
 - With ModdMudd's parameter list showing instead, the window resizes freely.
 - **The modulation chain.** You add only the modulators you want ("+ Add"), drag their tabs to reorder them, and remove them with the x on the tab (or right-click, or Delete). Removing a modulator also removes its connections. Connecting a modulator that isn't in the chain, such as "Assign to macro" from the parameter list, adds it automatically. The chain and its order are saved with the session. Older sessions show every modulator that is in use.
+- **Each source shows its targets.** A source's handle shows how many targets it has. Clicking the number (or Enter, or right-click > Show targets) opens a pop-up with a depth slider and a remove button for each target, so you don't have to open Routing.
 - **Routing.** The matrix, with every connection in one list, sits behind the Routing button, so the main view is just the plug-in and the chain.
 - Panels adapt to the width. Rows shrink towards minimum sizes, labels drop out before controls do, and the matrix hides its offset, range and smoothing columns below 820 px.
 

@@ -51,7 +51,8 @@ public:
 
         g.setColour (selected ? juce::Colours::black : p.text);
         g.setFont (MuddLookAndFeel::font (12.0f, true));
-        g.drawFittedText (getModuleTabName (module), textArea, juce::Justification::centred, 1, 0.7f);
+        const auto name = textArea.getWidth() >= 52 ? getModuleTabName (module) : getModuleShortName (module);
+        g.drawFittedText (name, textArea, juce::Justification::centred, 1, 0.7f);
     }
 
     void mouseEnter (const juce::MouseEvent&) override  { repaint(); }
@@ -160,6 +161,7 @@ ModdMuddEditor::ModdMuddEditor (ModdMuddProcessor& p)
     modulePanels[(size_t) modXy]     = std::make_unique<XYPanel> (processor);
     modulePanels[(size_t) modBlend]  = std::make_unique<BlendPanel> (processor);
     for (int i = 0; i < kNumEnvs; ++i)    modulePanels[(size_t) (modEnv0 + i)] = std::make_unique<EnvPanel> (processor, i);
+    for (int i = 0; i < kNumShapers; ++i) modulePanels[(size_t) (modShaper0 + i)] = std::make_unique<ShaperPanel> (processor, i);
 
     for (auto& panel : modulePanels)
         addChildComponent (*panel);
@@ -471,6 +473,7 @@ void ModdMuddEditor::showAddModuleMenu()
     addGroup ("Movement", modLfo0, kNumLfos);
     addGroup ("Randomness", modRandom0, kNumRandoms);
     addGroup ("Control", modMacros, 3);   // macros, XY pad, preset blender
+    addGroup ("Envelopes", modShaper0, kNumShapers);
     addGroup ("Follow audio", modEnv0, kNumEnvs);
 
     juce::Component::SafePointer<ModdMuddEditor> safe (this);
@@ -561,7 +564,8 @@ void ModdMuddEditor::layoutPanel (juce::Rectangle<int> panel)
     tabs.removeFromRight (8);
 
     const int n = moduleTabs.size();
-    const int addW = 64;
+    const int addW = (tabs.getWidth() - 4) / juce::jmax (1, n + 1) >= 56 ? 64 : 32;
+    addModuleButton.setButtonText (addW >= 64 ? "+ Add" : "+");
     const int tabW = n == 0 ? 0 : juce::jlimit (40, 96, (tabs.getWidth() - addW - 4) / n);
     for (auto* t : moduleTabs)
     {

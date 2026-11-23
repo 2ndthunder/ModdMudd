@@ -31,6 +31,9 @@ ModdMuddProcessor::ModdMuddProcessor()
     for (auto& w : customWaves)
         w = Lfo::defaultCustomPoints();
 
+    for (auto& c : shaperCurves)
+        c = Shaper::defaultPoints();
+
     for (auto& s : randomSeeds)
         s = (uint32_t) juce::Random::getSystemRandom().nextInt();
 
@@ -360,6 +363,10 @@ void ModdMuddProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     for (int i = 0; i < kNumLfos; ++i)
         tables[(size_t) i] = st->lfoTables[(size_t) i].size() == (size_t) kLfoTableSize ? st->lfoTables[(size_t) i].data() : nullptr;
 
+    std::array<const float*, kNumShapers> shaperTables {};
+    for (int i = 0; i < kNumShapers; ++i)
+        shaperTables[(size_t) i] = st->shaperTables[(size_t) i].size() == (size_t) kLfoTableSize ? st->shaperTables[(size_t) i].data() : nullptr;
+
     const int sub = st->subBlock > 0 ? st->subBlock : numSamples;
     std::array<float*, 8> ptrs {};
     std::array<const float*, 8> scPtrs {};
@@ -416,7 +423,14 @@ void ModdMuddProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
             }
         }
 
-        engine.computeSubBlock (settings, t, st->plan, len, tables);
+        // Shapers in audio-trigger mode listen to the input (the FX build) or
+        // to what came out last (the Instrument build, which has no input).
+        if constexpr (! kIsInstrumentBuild)
+            for (int i = 0; i < kNumShapers; ++i)
+                if (settings.shaper[(size_t) i].trigger == ShaperTrigger::audio)
+                    engine.feedShaper (i, ptrs.data(), numChannels, len, settings.shaper[(size_t) i].thresholdDb);
+
+        engine.computeSubBlock (settings, t, st->plan, len, tables, shaperTables);
         applyTargets (*st, len);
 
         subPlayHead.setOffset (start);
@@ -434,6 +448,11 @@ void ModdMuddProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
         for (int e = 0; e < kNumEnvs; ++e)
             if (settings.env[(size_t) e].source == EnvSource::output)
                 engine.feedEnvelope (e, ptrs.data(), numChannels, len, settings.env[(size_t) e]);
+
+        if constexpr (kIsInstrumentBuild)
+            for (int i = 0; i < kNumShapers; ++i)
+                if (settings.shaper[(size_t) i].trigger == ShaperTrigger::audio)
+                    engine.feedShaper (i, ptrs.data(), numChannels, len, settings.shaper[(size_t) i].thresholdDb);
     }
 
     outputGain.setTargetValue (juce::Decibels::decibelsToGain (refs.outputGain->load (std::memory_order_relaxed)));
@@ -634,6 +653,12 @@ void ModdMuddProcessor::rebuild()
     {
         st->lfoTables[(size_t) i].resize ((size_t) kLfoTableSize);
         Lfo::buildCustomTable (customWaves[(size_t) i], st->lfoTables[(size_t) i].data());
+    }
+
+    for (int i = 0; i < kNumShapers; ++i)
+    {
+        st->shaperTables[(size_t) i].resize ((size_t) kLfoTableSize);
+        Lfo::buildCustomTable (shaperCurves[(size_t) i], st->shaperTables[(size_t) i].data());
     }
 
     st->seeds = randomSeeds;
@@ -1017,6 +1042,27 @@ void ModdMuddProcessor::setCustomWave (int lfo, std::vector<WavePoint> points)
     rebuild();
 }
 
+std::vector<WavePoint> ModdMuddProcessor::getShaperCurve (int shaper) const
+{
+    const juce::ScopedLock sl (modelLock);
+    return juce::isPositiveAndBelow (shaper, kNumShapers) ? shaperCurves[(size_t) shaper] : std::vector<WavePoint> {};
+}
+
+void ModdMuddProcessor::setShaperCurve (int shaper, std::vector<WavePoint> points)
+{
+    if (! juce::isPositiveAndBelow (shaper, kNumShapers) || points.size() < 2)
+        return;
+
+    if (points.size() > (size_t) kMaxCustomPoints)
+        points.resize ((size_t) kMaxCustomPoints);
+
+    {
+        const juce::ScopedLock sl (modelLock);
+        shaperCurves[(size_t) shaper] = std::move (points);
+    }
+    rebuild();
+}
+
 uint32_t ModdMuddProcessor::getRandomSeed (int index) const
 {
     return juce::isPositiveAndBelow (index, kNumRandoms) ? randomSeeds[(size_t) index] : 0u;
@@ -1320,6 +1366,23 @@ juce::ValueTree ModdMuddProcessor::createStateTree()
     }
     root.appendChild (waves, nullptr);
 
+    juce::ValueTree shapes ("Shapes");
+    for (int i = 0; i < kNumShapers; ++i)
+    {
+        juce::ValueTree w ("Shape");
+        w.setProperty ("index", i, nullptr);
+        for (auto& p : shaperCurves[(size_t) i])
+        {
+            juce::ValueTree pt ("Pt");
+            pt.setProperty ("x", p.x, nullptr);
+            pt.setProperty ("y", p.y, nullptr);
+            pt.setProperty ("c", p.curve, nullptr);
+            w.appendChild (pt, nullptr);
+        }
+        shapes.appendChild (w, nullptr);
+    }
+    root.appendChild (shapes, nullptr);
+
     juce::ValueTree seeds ("Seeds");
     for (int i = 0; i < kNumRandoms; ++i)
         seeds.setProperty ("s" + juce::String (i), (juce::int64) randomSeeds[(size_t) i], nullptr);
@@ -1459,6 +1522,10 @@ void ModdMuddProcessor::restoreStateTree (const juce::ValueTree& root)
             snapshots[snapshotKey (e.slotUid, e.paramId)] = e;
         }
 
+        // Sessions saved before a feature existed get its defaults.
+        for (auto& w : customWaves)   w = Lfo::defaultCustomPoints();
+        for (auto& c : shaperCurves)  c = Shaper::defaultPoints();
+
         for (auto w : root.getChildWithName ("Waves"))
         {
             const int i = w.getProperty ("index", -1);
@@ -1471,6 +1538,20 @@ void ModdMuddProcessor::restoreStateTree (const juce::ValueTree& root)
 
             if (pts.size() >= 2)
                 customWaves[(size_t) i] = pts;
+        }
+
+        for (auto w : root.getChildWithName ("Shapes"))
+        {
+            const int i = w.getProperty ("index", -1);
+            if (! juce::isPositiveAndBelow (i, kNumShapers))
+                continue;
+
+            std::vector<WavePoint> pts;
+            for (auto pt : w)
+                pts.push_back ({ (float) pt.getProperty ("x"), (float) pt.getProperty ("y"), (float) pt.getProperty ("c") });
+
+            if (pts.size() >= 2)
+                shaperCurves[(size_t) i] = pts;
         }
 
         const auto seeds = root.getChildWithName ("Seeds");

@@ -21,12 +21,13 @@ Early development. Hosting, the modulation engine, the editor and state saving w
 
 - The modulation panel snaps under the hosted plug-in at the plug-in's own width, so the two read as one window. Resizable plug-ins follow the window.
 - Hosts up to four VST3 plug-ins in series (an instrument plus effects in the Instrument build).
-- **Build your own modulation chain:** add only the modulators you want, drag to reorder, remove with one click. Choose from 4 LFOs (including custom drawn shapes), 2 randomizers, 8 macros, an XY pad, 2 envelope followers, and a four-state preset blender.
+- **Build your own modulation chain:** add only the modulators you want, drag to reorder, remove with one click. Choose from 4 LFOs (including custom drawn shapes), 2 randomizers, 8 macros, an XY pad, 2 envelope followers, 2 drawn envelope generators ("Shapers", triggered by notes, audio transients or the transport), and a four-state preset blender.
 - **Cross-modulation**, where modulators drive each other. Loops are refused.
 - **Assigning modulation:**
   - drag a source onto a parameter
   - click a source, then move a control in the hosted plug-in's own window
   - use the Routing view
+- Each source shows how many targets it has. Click the number to adjust depths or remove targets in place.
 - Modulation resolution is per 32-sample sub-block by default, rather than per host buffer.
 - 256 DAW-automatable slots, named after the hosted parameters. MIDI learn on every ModdMudd control.
 - Sessions and presets find hosted plug-ins by VST3 class ID, so they move between machines. Plug-ins that aren't installed are kept, not lost.

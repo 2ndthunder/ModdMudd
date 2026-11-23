@@ -42,6 +42,13 @@ struct ParamRanges
         return r;
     }
 
+    static juce::NormalisableRange<float> shaperTime()
+    {
+        juce::NormalisableRange<float> r (10.0f, 20000.0f);
+        r.setSkewForCentre (500.0f);
+        return r;
+    }
+
     static juce::NormalisableRange<float> timeMs (float lo, float hi, float centre)
     {
         juce::NormalisableRange<float> r (lo, hi);

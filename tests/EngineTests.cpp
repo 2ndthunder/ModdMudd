@@ -626,6 +626,130 @@ struct RtSwapTests final : juce::UnitTest
 };
 
 //==============================================================================
+struct ShaperTests final : juce::UnitTest
+{
+    ShaperTests() : juce::UnitTest ("Shaper", "ModdMudd") {}
+
+    void runTest() override
+    {
+        // A triangle from 0 up to 1 (half way) and back to 0.
+        std::vector<float> table ((size_t) kLfoTableSize);
+        Lfo::buildCustomTable ({ { 0.0f, -1.0f, 0.0f }, { 0.5f, 1.0f, 0.0f }, { 1.0f, -1.0f, 0.0f } }, table.data());
+
+        ShaperSettings s;
+        TransportInfo t;
+
+        beginTest ("One-shot on note-on, holds the end value afterwards");
+        {
+            Shaper sh;
+            sh.prepare (1000.0);
+            expectWithinAbsoluteError (sh.process (s, t, 100, 1.0, true, 1.0f, table.data()), 0.0f, 1.0e-3f);   // idle
+            expect (! sh.isRunning());
+
+            t.noteOn = true;
+            expectWithinAbsoluteError (sh.process (s, t, 100, 1.0, true, 1.0f, table.data()), 0.0f, 1.0e-3f);   // start
+            t.noteOn = false;
+            expect (sh.isRunning());
+
+            for (int i = 0; i < 4; ++i)
+                sh.process (s, t, 100, 1.0, true, 1.0f, table.data());
+            expectWithinAbsoluteError (sh.process (s, t, 100, 1.0, true, 1.0f, table.data()), 1.0f, 1.0e-2f);    // peak at 0.5 s
+
+            for (int i = 0; i < 6; ++i)
+                sh.process (s, t, 100, 1.0, true, 1.0f, table.data());
+            expect (! sh.isRunning());
+            expectWithinAbsoluteError (sh.process (s, t, 100, 1.0, true, 1.0f, table.data()), 0.0f, 1.0e-2f);
+        }
+
+        beginTest ("Depth scales the output");
+        {
+            Shaper sh;
+            sh.prepare (1000.0);
+            sh.trigger();
+            sh.process (s, t, 500, 1.0, true, 0.5f, table.data());
+            expectWithinAbsoluteError (sh.process (s, t, 1, 1.0, true, 0.5f, table.data()), 0.5f, 1.0e-2f);
+        }
+
+        beginTest ("Note-on only starts note-triggered shapers");
+        {
+            auto ts = s;
+            ts.trigger = ShaperTrigger::transport;
+            Shaper sh;
+            sh.prepare (1000.0);
+            t.noteOn = true;
+            sh.process (ts, t, 10, 1.0, true, 1.0f, table.data());
+            t.noteOn = false;
+            expect (! sh.isRunning());
+
+            t.playStarted = true;
+            sh.process (ts, t, 10, 1.0, true, 1.0f, table.data());
+            t.playStarted = false;
+            expect (sh.isRunning());
+        }
+
+        beginTest ("Audio transients trigger, with hysteresis and hold-off");
+        {
+            auto as = s;
+            as.trigger = ShaperTrigger::audio;
+            as.thresholdDb = -12.0f;
+
+            Shaper sh;
+            sh.prepare (48000.0);
+
+            std::vector<float> quiet (480, 0.01f), loud (480, 0.9f);
+            const float* q[] { quiet.data() };
+            const float* l[] { loud.data() };
+
+            sh.feedAudio (q, 1, 480, as.thresholdDb);
+            sh.process (as, t, 480, 0.2, true, 1.0f, table.data());
+            expect (! sh.isRunning(), "quiet input doesn't trigger");
+
+            sh.feedAudio (l, 1, 480, as.thresholdDb);
+            sh.process (as, t, 480, 0.2, true, 1.0f, table.data());
+            expect (sh.isRunning(), "a transient triggers");
+
+            // Staying loud doesn't re-trigger: the envelope keeps running.
+            const double before = sh.getPhase();
+            sh.feedAudio (l, 1, 480, as.thresholdDb);
+            sh.process (as, t, 480, 0.2, true, 1.0f, table.data());
+            expect (sh.getPhase() > before);
+        }
+
+        beginTest ("Loop mode repeats and locks to the song position when synced");
+        {
+            auto ls = s;
+            ls.trigger = ShaperTrigger::loop;
+            Shaper sh;
+            sh.prepare (1000.0);
+
+            float maxV = 0.0f;
+            for (int i = 0; i < 30; ++i)
+                maxV = juce::jmax (maxV, sh.process (ls, t, 100, 1.0, true, 1.0f, table.data()));
+            expect (sh.isRunning());
+            expect (maxV > 0.95f, "reaches the peak repeatedly");
+
+            ls.sync = true;
+            ls.division = 7;   // 1/4 note
+            TransportInfo playing;
+            playing.isPlaying = true;
+            playing.hasPpq = true;
+            playing.ppq = 12.5;   // half way through a beat -> peak
+            expectWithinAbsoluteError (sh.process (ls, playing, 32, 0.5, true, 1.0f, table.data()), 1.0f, 1.0e-2f);
+        }
+
+        beginTest ("Default curve starts and ends at zero");
+        {
+            Lfo::buildCustomTable (Shaper::defaultPoints(), table.data());
+            expectWithinAbsoluteError (Shaper::valueAt (table.data(), 0.0), 0.0f, 1.0e-3f);
+            expectWithinAbsoluteError (Shaper::valueAt (table.data(), 1.0), 0.0f, 1.0e-2f);
+            expect (Shaper::valueAt (table.data(), 0.06) > 0.95f);
+        }
+    }
+};
+
+static ShaperTests shaperTests;
+
+//==============================================================================
 struct ModuleTests final : juce::UnitTest
 {
     ModuleTests() : juce::UnitTest ("Modules", "ModdMudd") {}

@@ -42,6 +42,7 @@ set(MODDMUDD_ENGINE_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/Engine/Lfo.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/Engine/Randomizer.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/Engine/EnvelopeFollower.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Source/Engine/Shaper.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/Engine/ModEngine.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/Engine/ModMatrix.cpp)
 

@@ -26,6 +26,7 @@
 - **Time resolution** is the sub-block size (32 samples by default), not per sample, because JUCE 9.0.6 has no sample-accurate path for hosted parameters. Smaller sub-blocks cost more CPU, and a few plug-ins handle very small blocks poorly. If a plug-in misbehaves, raise the setting.
 - **Synced LFOs and randomizers stop locking to the bar grid** while their rate is cross-modulated. They free-run at the modulated rate instead.
 - **Envelope follower latency.** It reads the audio of the sub-block it is in, so modulation from it lags by up to one sub-block. In the Instrument build there is no audio input: use the Output source.
+- **Shapers play their whole curve on each trigger.** There's no sustain stage held while a note is down, and note-offs are ignored. In the FX build, audio triggering listens to the input. The Instrument build has no input, so it listens to its own output.
 - **The preset blender stores base values**, i.e. what you set, not what modulation produced. Discrete parameters switch to the nearest snapshot. They don't interpolate.
 
 ## Not done yet
