@@ -28,6 +28,7 @@ Early development. Hosting, the modulation engine, the editor and state saving w
   - click a source, then move a control in the hosted plug-in's own window
   - use the Routing view
 - The preset blender can capture snapshots straight from a hosted plug-in's own presets, then morph between them.
+- Every modulator has its own colour. Modulated parameters show coloured tags for their sources, and the range the modulation can reach.
 - Each source shows how many targets it has. Click the number to adjust depths or remove targets in place.
 - Modulation resolution is per 32-sample sub-block by default, rather than per host buffer.
 - 256 DAW-automatable slots, named after the hosted parameters. MIDI learn on every ModdMudd control.

@@ -199,6 +199,18 @@ void MuddLookAndFeel::drawLinearSlider (juce::Graphics& g, int x, int y, int wid
     g.setColour (slider.findColour (juce::Slider::trackColourId).withAlpha (slider.isEnabled() ? 1.0f : 0.4f));
     g.fillRoundedRectangle (fill, trackH * 0.5f);
 
+    // Range the modulation can reach (generic parameter rows)
+    if (slider.getProperties().contains ("modLo"))
+    {
+        const float lo = (float) slider.getProperties()["modLo"];
+        const float hi = (float) slider.getProperties()["modHi"];
+        auto band = track.withLeft (track.getX() + lo * track.getWidth())
+                         .withRight (track.getX() + hi * track.getWidth())
+                         .expanded (0.0f, trackH * 0.45f);
+        g.setColour (palette.active.withAlpha (0.28f));
+        g.fillRoundedRectangle (band, trackH * 0.5f);
+    }
+
     // Modulated position marker (generic parameter rows)
     if (slider.getProperties().contains ("modValue"))
     {

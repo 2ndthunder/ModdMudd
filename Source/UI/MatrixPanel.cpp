@@ -191,6 +191,8 @@ public:
             return;
 
         updating = true;
+        sourceIndex = c->source;
+        repaint();
         enabled.setToggleState (c->enabled, juce::dontSendNotification);
         name.setText (getSourceName (c->source) + "  >  " + describeDestination (processor, c->dest), juce::dontSendNotification);
         depth.setValue (c->depth, juce::dontSendNotification);
@@ -216,7 +218,7 @@ public:
 
         for (int i = 0; i < numColumns; ++i)
         {
-            order[i]->setBounds (cols[(size_t) i]);
+            order[i]->setBounds (i == colName ? cols[(size_t) i].withTrimmedLeft (6) : cols[(size_t) i]);
             order[i]->setVisible (cols[(size_t) i].getWidth() > 0);
         }
     }
@@ -225,6 +227,11 @@ public:
     {
         g.setColour (paletteFor (*this).outline);
         g.drawHorizontalLine (getHeight() - 1, 0.0f, (float) getWidth());
+
+        // The source's colour beside its name.
+        g.setColour (sourceColour (sourceIndex));
+        g.fillRoundedRectangle (juce::Rectangle<float> (4.0f, (float) getHeight() - 12.0f)
+                                    .withPosition ((float) name.getX() - 2.0f, 6.0f), 2.0f);
     }
 
 private:
@@ -260,7 +267,7 @@ private:
     }
 
     ModdMuddProcessor& processor;
-    int connectionId = 0;
+    int connectionId = 0, sourceIndex = 0;
     bool updating = false;
     juce::ToggleButton enabled;
     juce::Label name;

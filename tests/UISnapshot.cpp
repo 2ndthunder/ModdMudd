@@ -45,6 +45,10 @@ int main (int argc, char* argv[])
                     c.dest = mm::Destination::hosted (slot.getUid(), slot.getParamId (pi));
                     c.depth = 0.4f;
                     proc->addConnection (c);
+
+                    c.source = mm::srcMacro0;      // a second modulator on the same parameter
+                    c.depth = 0.2f;
+                    proc->addConnection (c);
                     break;
                 }
 

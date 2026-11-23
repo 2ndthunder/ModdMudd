@@ -67,7 +67,54 @@ public:
         if (auto* param = slot->getParam (paramIndex))
             value.setText (param->getText (driven ? shown : base, 24), juce::dontSendNotification);
 
-        modCount = driven ? (int) processor.getMatrix().getConnectionsTo (destination()).size() : 0;
+        // Which modulators move this parameter, and how far they can take it.
+        std::vector<int> sources;
+        float lowest = 0.0f, highest = 0.0f;
+        DestinationSettings range;
+
+        if (driven)
+        {
+            const auto dest = destination();
+            range = processor.getMatrix().getSettings (dest);
+
+            for (auto* c : processor.getMatrix().getConnectionsTo (dest))
+            {
+                if (! c->enabled)
+                    continue;
+
+                if (std::find (sources.begin(), sources.end(), c->source) == sources.end())
+                    sources.push_back (c->source);
+
+                const bool bipolarSource = processor.getEngine().isSourceBipolar (c->source);
+                float vMin = bipolarSource ? -1.0f : 0.0f, vMax = 1.0f;
+                if (c->polarity == Polarity::unipolar) vMin = 0.0f;
+                if (c->polarity == Polarity::bipolar)  vMin = -1.0f;
+
+                const float a = c->depth * vMin + c->offset, b = c->depth * vMax + c->offset;
+                lowest += juce::jmin (a, b);
+                highest += juce::jmax (a, b);
+            }
+        }
+
+        modCount = (int) sources.size();
+
+        if (! sources.empty())
+        {
+            slider.getProperties().set ("modLo", juce::jlimit (range.rangeMin, range.rangeMax, base + lowest));
+            slider.getProperties().set ("modHi", juce::jlimit (range.rangeMin, range.rangeMax, base + highest));
+        }
+        else
+        {
+            slider.getProperties().remove ("modLo");
+            slider.getProperties().remove ("modHi");
+        }
+
+        if (sources != tagSources)
+        {
+            tagSources = sources;
+            resized();
+        }
+
         slider.repaint();
         repaint();
     }
@@ -75,7 +122,9 @@ public:
     void resized() override
     {
         auto r = getLocalBounds().reduced (6, 2);
-        name.setBounds (r.removeFromLeft (r.getWidth() * 35 / 100));
+        auto nameArea = r.removeFromLeft (r.getWidth() * 35 / 100);
+        tagArea = nameArea.removeFromRight (juce::jmin (nameArea.getWidth() / 2, tagsWidth()));
+        name.setBounds (nameArea);
         value.setBounds (r.removeFromRight (90));
         r.removeFromRight (16);
         slider.setBounds (r);
@@ -94,6 +143,25 @@ public:
         {
             g.setColour (p.active);
             g.fillEllipse (juce::Rectangle<float> (8.0f, 8.0f).withCentre ({ (float) slider.getRight() + 9.0f, getHeight() * 0.5f }));
+        }
+
+        // Coloured tags naming the modulators that move this parameter.
+        auto tags = tagArea;
+        g.setFont (MuddLookAndFeel::font (10.5f, true));
+        for (size_t i = 0; i < tagSources.size() && i < 3; ++i)
+        {
+            auto tag = tags.removeFromLeft (tagWidth (tagSources[i])).reduced (1, 6).toFloat();
+            tags.removeFromLeft (2);
+            g.setColour (sourceColour (tagSources[i]));
+            g.fillRoundedRectangle (tag, 3.0f);
+            g.setColour (juce::Colours::black);
+            g.drawText (getSourceShortName (tagSources[i]), tag, juce::Justification::centred);
+        }
+
+        if (tagSources.size() > 3)
+        {
+            g.setColour (p.textDim);
+            g.drawText ("+" + juce::String ((int) tagSources.size() - 3), tags, juce::Justification::centredLeft);
         }
 
         g.setColour (p.outline);
@@ -159,12 +227,24 @@ private:
         });
     }
 
+    static int tagWidth (int source)   { return getSourceShortName (source).length() > 2 ? 38 : 26; }
+
+    int tagsWidth() const
+    {
+        int w = 0;
+        for (size_t i = 0; i < tagSources.size() && i < 3; ++i)
+            w += tagWidth (tagSources[i]) + 2;
+        return tagSources.size() > 3 ? w + 24 : w;
+    }
+
     ModdMuddProcessor& processor;
     int slotIndex, paramIndex = 0;
     juce::Label name, value;
     MuddSlider slider;
     bool updating = false, dragOver = false;
     int modCount = 0;
+    std::vector<int> tagSources;
+    juce::Rectangle<int> tagArea;
 };
 
 //==============================================================================

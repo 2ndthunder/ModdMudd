@@ -28,10 +28,18 @@ public:
         const auto& p = paletteFor (*this);
         auto r = getLocalBounds().toFloat().reduced (1.0f, 0.5f);
 
-        g.setColour (selected ? p.active : (isMouseOver() ? p.panelHeader.brighter (0.1f) : p.panelHeader));
+        const auto colour = moduleColour (module);
+        g.setColour (selected ? colour : (isMouseOver() ? p.panelHeader.brighter (0.1f) : p.panelHeader));
         g.fillRoundedRectangle (r, 3.0f);
         g.setColour (hasKeyboardFocus (false) ? p.active : p.outline);
         g.drawRoundedRectangle (r, 3.0f, 1.0f);
+
+        if (! selected)
+        {
+            // The modulator's colour, so tabs match handles and parameter tags.
+            g.setColour (colour);
+            g.fillRect (r.withTop (r.getBottom() - 3.0f).reduced (4.0f, 0.0f));
+        }
 
         if (dropMarker)
         {

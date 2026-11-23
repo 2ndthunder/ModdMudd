@@ -155,6 +155,27 @@ inline bool moduleOwnsSource (int m, int source)
     return false;
 }
 
+inline int moduleForSource (int source)
+{
+    for (int m = 0; m < kNumModules; ++m)
+        if (moduleOwnsSource (m, source))
+            return m;
+    return -1;
+}
+
+/** Short source names for tags on parameters: L1, R2, M3, XY-X, F1, S2. */
+inline juce::String getSourceShortName (int source)
+{
+    if (source >= srcLfo0 && source < srcRandom0)    return "L" + juce::String (source - srcLfo0 + 1);
+    if (source >= srcRandom0 && source < srcMacro0)  return "R" + juce::String (source - srcRandom0 + 1);
+    if (source >= srcMacro0 && source < srcXyX)      return "M" + juce::String (source - srcMacro0 + 1);
+    if (source == srcXyX)                            return "XY-X";
+    if (source == srcXyY)                            return "XY-Y";
+    if (source >= srcEnv0 && source < srcShaper0)    return "F" + juce::String (source - srcEnv0 + 1);
+    if (source >= srcShaper0 && source < kNumSources) return "S" + juce::String (source - srcShaper0 + 1);
+    return {};
+}
+
 inline bool moduleOwnsInternal (int m, int ip)
 {
     if (m == modBlend)

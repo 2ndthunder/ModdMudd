@@ -1,5 +1,6 @@
 #include "Widgets.h"
 #include "MatrixPanel.h"
+#include <iterator>
 
 namespace mm
 {
@@ -15,6 +16,22 @@ const Palette& paletteFor (const juce::Component& c)
     // crash the host on exit.
     static const Palette fallback = [] { MuddLookAndFeel lnf; return lnf.getPalette(); }();
     return fallback;
+}
+
+juce::Colour moduleColour (int module)
+{
+    static const juce::uint32 colours[] {
+        0xff39b3d6, 0xff4c8dff, 0xff7a6cff, 0xffb06cff,   // LFO 1-4
+        0xffff6fb1, 0xffff5a7a,                           // Random 1-2
+        0xffe9a23b,                                       // Macros
+        0xfff2d04b,                                       // XY pad
+        0xff8bd45a,                                       // Blender
+        0xff3ccb9a, 0xff2fb8a8,                           // Follower 1-2
+        0xffff8a4c, 0xffe8703a                            // Shaper 1-2
+    };
+    static_assert (std::size (colours) == (size_t) kNumModules, "one colour per module");
+
+    return juce::isPositiveAndBelow (module, kNumModules) ? juce::Colour (colours[module]) : juce::Colours::grey;
 }
 
 void refreshShowing (juce::Component& root)
@@ -503,9 +520,10 @@ void SourceChip::paint (juce::Graphics& g)
     g.setColour (armed ? p.active : p.outline);
     g.drawRoundedRectangle (r, 4.0f, armed ? 2.0f : 1.0f);
 
-    // Crosshair "plug" icon
+    // Crosshair "plug" icon, in the modulator's colour
+    const auto colour = sourceColour (source);
     auto icon = r.removeFromLeft (r.getHeight()).reduced (5.0f);
-    g.setColour (p.value);
+    g.setColour (colour);
     g.drawEllipse (icon, 1.5f);
     g.drawLine (icon.getCentreX(), icon.getY() - 2.0f, icon.getCentreX(), icon.getBottom() + 2.0f, 1.2f);
     g.drawLine (icon.getX() - 2.0f, icon.getCentreY(), icon.getRight() + 2.0f, icon.getCentreY(), 1.2f);
@@ -516,7 +534,7 @@ void SourceChip::paint (juce::Graphics& g)
     g.fillRect (bar);
     const bool bipolar = processor.getEngine().isSourceBipolar (source);
     const float v = juce::jlimit (-1.0f, 1.0f, shownValue);
-    g.setColour (p.active);
+    g.setColour (colour);
     if (bipolar)
     {
         const float mid = bar.getCentreX();
@@ -533,7 +551,7 @@ void SourceChip::paint (juce::Graphics& g)
     if (targetCount > 0 && getWidth() >= 70)
     {
         const auto badge = badgeArea().toFloat();
-        g.setColour (p.value);
+        g.setColour (colour);
         g.fillRoundedRectangle (badge, badge.getHeight() * 0.5f);
         g.setColour (juce::Colours::black);
         g.setFont (MuddLookAndFeel::font (11.0f, true));

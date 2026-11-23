@@ -22,6 +22,12 @@ struct Refreshable
     subtrees are skipped. */
 void refreshShowing (juce::Component& root);
 
+/** Each modulator has its own colour, used wherever it appears (tab,
+    handle, tags on the parameters it moves), so it's clear which modulator
+    is doing what. The same in every theme. */
+juce::Colour moduleColour (int module);
+inline juce::Colour sourceColour (int source)   { return moduleColour (moduleForSource (source)); }
+
 /** Drag-and-drop description used for modulation sources. */
 inline juce::String sourceDragId (int source)       { return "mmsrc:" + juce::String (source); }
 inline int sourceFromDragId (const juce::var& d)    { auto s = d.toString(); return s.startsWith ("mmsrc:") ? s.substring (6).getIntValue() : -1; }

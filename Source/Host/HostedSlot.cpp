@@ -52,7 +52,16 @@ void HostedSlot::initialiseParameters()
         s.discrete = p->isDiscrete() || p->isBoolean();
         s.numSteps = p->getNumSteps();
 
-        modulatable[(size_t) i] = p != bypass && p->isAutomatable() && p->getName (64).trim().isNotEmpty();
+        // The plug-in's preset-switch parameter isn't offered: modulating it
+        // would jump between whole presets. JUCE doesn't expose the VST3
+        // flag, so recognise it by shape: one step per preset, named so.
+        const auto name = p->getName (64).trim();
+        const int numPrograms = instance->getNumPrograms();
+        const bool isProgramSwitch = numPrograms > 1 && p->getNumSteps() == numPrograms
+                                     && (name.equalsIgnoreCase ("Program") || name.equalsIgnoreCase ("Programs")
+                                         || name.equalsIgnoreCase ("Preset") || name.equalsIgnoreCase ("Presets"));
+
+        modulatable[(size_t) i] = p != bypass && ! isProgramSwitch && p->isAutomatable() && name.isNotEmpty();
 
         p->addListener (this);
     }
