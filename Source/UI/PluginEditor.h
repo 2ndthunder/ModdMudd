@@ -4,6 +4,7 @@
 #include "HostedView.h"
 #include "ModulatorPanels.h"
 #include "MatrixPanel.h"
+#include "Tutorial.h"
 
 namespace mm
 {
@@ -27,6 +28,9 @@ public:
     // Modulation chain
     void selectModule (int module);
     void showRouting();
+
+    /** Starts the guided tour of the editor. */
+    void startTutorial();
     void requestRemoveModule (int module);
     void moveModuleBefore (int module, int targetModule);
     int getSelectedModule() const noexcept   { return showingRouting ? -1 : selectedModule; }
@@ -52,7 +56,9 @@ private:
     MuddLookAndFeel lnf;
     juce::TooltipWindow tooltips { this, 600 };
 
-    juce::TextButton slotButton, addButton { "+" }, viewButton, presetButton { "Presets" }, settingsButton { "Settings" };
+    juce::TextButton slotButton, addButton { "+" }, viewButton, presetButton { "Presets" }, settingsButton { "Settings" },
+                     tutorialButton { "Tutorial" };
+    std::unique_ptr<TutorialOverlay> tutorial;
     HostedView hosted;
 
     juce::OwnedArray<ModuleTab> moduleTabs;

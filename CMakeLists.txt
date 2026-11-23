@@ -57,6 +57,7 @@ set(MODDMUDD_PLUGIN_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/UI/ModulatorPanels.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/UI/MatrixPanel.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/UI/HostedView.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Source/UI/Tutorial.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Source/UI/PluginEditor.cpp)
 
 set(MODDMUDD_COMMON_DEFINITIONS

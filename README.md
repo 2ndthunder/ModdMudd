@@ -12,6 +12,7 @@ Early development. Hosting, the modulation engine, the editor and state saving w
 
 | | |
 |---|---|
+| [docs/TUTORIAL.md](docs/TUTORIAL.md) | **start here**: a first session, step by step |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | how it works and why |
 | [docs/BUILDING.md](docs/BUILDING.md) | build on Linux and macOS |
 | [docs/LIMITATIONS.md](docs/LIMITATIONS.md) | known limitations |
@@ -29,6 +30,7 @@ Early development. Hosting, the modulation engine, the editor and state saving w
   - use the Routing view
 - The preset blender can capture snapshots straight from a hosted plug-in's own presets, then morph between them.
 - Every modulator has its own colour. Modulated parameters show coloured tags for their sources, and the range the modulation can reach.
+- A guided tour inside the plug-in (the Tutorial button). It opens by itself the first time.
 - Each source shows how many targets it has. Click the number to adjust depths or remove targets in place.
 - Modulation resolution is per 32-sample sub-block by default, rather than per host buffer.
 - 256 DAW-automatable slots, named after the hosted parameters. MIDI learn on every ModdMudd control.

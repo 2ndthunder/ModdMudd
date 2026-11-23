@@ -144,6 +144,23 @@ int main (int argc, char* argv[])
         list->setLookAndFeel (nullptr);
     }
 
+    // The guided tour: a few steps at the default size.
+    {
+        editor->setSize (900, 360 + mm::ModdMuddEditor::panelHeight);
+        moddEditor->selectModule (mm::modLfo0);
+        moddEditor->startTutorial();
+
+        if (auto* tour = dynamic_cast<mm::TutorialOverlay*> (editor->findChildWithID ("tutorialOverlay")))
+        {
+            for (int step : { 0, 1, 3, 6, 7, tour->getNumSteps() - 1 })
+            {
+                tour->showStep (step);
+                save (*editor, outDir.getChildFile ("tutorial_step" + juce::String (step + 1) + ".png"));
+            }
+            editor->removeChildComponent (tour);
+        }
+    }
+
     // A short chain, as a new user would build it.
     for (int m = mm::kNumModules - 1; m >= 0; --m)
         if (m != mm::modLfo0 && m != mm::modMacros && m != mm::modEnv0)

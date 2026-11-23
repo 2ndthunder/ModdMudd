@@ -143,8 +143,13 @@ ModdMuddEditor::ModdMuddEditor (ModdMuddProcessor& p)
     lnf.setTheme (processor.getThemeIndex());
     setLookAndFeel (&lnf);
 
-    for (auto* b : { &slotButton, &addButton, &viewButton, &presetButton, &settingsButton })
+    for (auto* b : { &slotButton, &addButton, &viewButton, &presetButton, &settingsButton, &tutorialButton })
         addAndMakeVisible (b);
+
+    tutorialButton.setTitle ("Tutorial");
+    tutorialButton.setTooltip ("A guided tour of ModdMudd");
+    tutorialButton.setComponentID ("tutorial");
+    tutorialButton.onClick = [this] { startTutorial(); };
 
     slotButton.setTooltip ("The hosted plug-in. Click to switch, load, replace or remove plug-ins.");
     slotButton.setTitle ("Hosted plug-in");
@@ -215,6 +220,13 @@ ModdMuddEditor::ModdMuddEditor (ModdMuddProcessor& p)
 
     setWantsKeyboardFocus (true);
     startTimerHz (30);   // the only UI timer: see Refreshable
+
+    // The first time ModdMudd is opened on this computer, offer the tour.
+    if (! TutorialOverlay::hasBeenSeen())
+    {
+        juce::Component::SafePointer<ModdMuddEditor> safe (this);
+        juce::MessageManager::callAsync ([safe] { if (safe != nullptr && safe->isShowing()) safe->startTutorial(); });
+    }
 }
 
 ModdMuddEditor::~ModdMuddEditor()
@@ -422,6 +434,117 @@ void ModdMuddEditor::showRouting()
     repaint();
 }
 
+void ModdMuddEditor::startTutorial()
+{
+    const bool instrument = kIsInstrumentBuild;
+    std::vector<TutorialStep> steps;
+
+    auto bounds = [this] (juce::Component& c) { return getLocalArea (&c, c.getLocalBounds()); };
+
+    // The handle of whichever modulator is showing.
+    auto visibleChip = [this]() -> juce::Component*
+    {
+        std::function<juce::Component* (juce::Component&)> find = [&find] (juce::Component& c) -> juce::Component*
+        {
+            for (auto* child : c.getChildren())
+            {
+                if (! child->isVisible()) continue;
+                if (dynamic_cast<SourceChip*> (child) != nullptr) return child;
+                if (auto* found = find (*child)) return found;
+            }
+            return nullptr;
+        };
+
+        for (auto& panel : modulePanels)
+            if (panel->isVisible())
+                return find (*panel);
+        return nullptr;
+    };
+
+    steps.push_back ({ "Welcome to ModdMudd",
+        juce::String ("ModdMudd hosts another plug-in and moves its controls for you, with LFOs, randomizers, macros, "
+                      "envelopes and more. This tour takes about a minute. Use the arrow keys or the buttons below; "
+                      "Escape closes it."), {} });
+
+    steps.push_back ({ "1. Load a plug-in",
+        juce::String ("Click here to choose the plug-in ModdMudd hosts. ")
+            + (instrument ? "This is the Instrument version: load a VST3 instrument first; you can add effects after it."
+                          : "This is the FX version: load any VST3 effect.")
+            + " If the list is empty, use Settings > Scan for plug-ins.",
+        [this, bounds] { return bounds (slotButton); } });
+
+    steps.push_back ({ "2. The plug-in's window",
+        "The hosted plug-in appears up here, with ModdMudd's panel snapped underneath at the same width.",
+        [this, bounds] { return bounds (hosted); } });
+
+    steps.push_back ({ "3. Plug-in window or parameter list",
+        "Switch between the plug-in's own window and ModdMudd's list of its parameters. The list works with every "
+        "plug-in, shows which modulators move each parameter, and accepts dragged modulators.",
+        [this, bounds] { return bounds (viewButton); } });
+
+    steps.push_back ({ "4. Your modulation chain",
+        "Each tab is a modulator, in its own colour. Click a tab to edit it, drag tabs to reorder them, and click the x "
+        "to remove one (along with its connections).",
+        [this, bounds]
+        {
+            juce::Rectangle<int> area;
+            for (auto* t : moduleTabs)
+                area = area.isEmpty() ? bounds (*t) : area.getUnion (bounds (*t));
+            return area.isEmpty() ? bounds (addModuleButton) : area;
+        } });
+
+    steps.push_back ({ "5. Add modulators",
+        "Add LFOs, randomizers, macros, an XY pad, the preset blender, envelope followers and drawn envelopes "
+        "(Shapers). Add only the ones you need.",
+        [this, bounds] { return bounds (addModuleButton); } });
+
+    steps.push_back ({ "6. Connect a modulator",
+        "This handle is the modulator's output. Drag it onto a parameter in the list, or click it and then move a "
+        "control in the plug-in's window. The number on it shows how many targets it has: click it to adjust depths "
+        "or remove targets.",
+        [this, bounds, visibleChip]
+        {
+            if (auto* chip = visibleChip())
+                return bounds (*chip);
+            return bounds (addModuleButton);
+        } });
+
+    steps.push_back ({ "7. Shape the movement",
+        "Each modulator's settings are here. You can also drop a handle onto a modulator's knobs, so one modulator "
+        "drives another (for example an LFO speeding up another LFO).",
+        [this, bounds]
+        {
+            for (auto& panel : modulePanels)
+                if (panel->isVisible())
+                    return bounds (*panel);
+            return juce::Rectangle<int>();
+        } });
+
+    steps.push_back ({ "8. Routing",
+        "Every connection in one list: depth, offset, polarity, the range a parameter can move in, and smoothing.",
+        [this, bounds] { return bounds (routingButton); } });
+
+    steps.push_back ({ "9. Presets",
+        "Save and load complete setups, including the hosted plug-in and its settings.",
+        [this, bounds] { return bounds (presetButton); } });
+
+    steps.push_back ({ "10. Settings",
+        "Scan for plug-ins, add plug-in folders, set the modulation resolution and pick a colour theme.",
+        [this, bounds] { return bounds (settingsButton); } });
+
+    steps.push_back ({ "You're ready",
+        "Load a plug-in, add an LFO, and drag its handle onto a parameter to hear it move. You can take this tour again "
+        "any time with the Tutorial button.",
+        [this, bounds] { return bounds (tutorialButton); } });
+
+    tutorial = std::make_unique<TutorialOverlay> (std::move (steps));
+    tutorial->setComponentID ("tutorialOverlay");
+    tutorial->onClose = [this] { tutorial.reset(); grabKeyboardFocus(); };
+    addAndMakeVisible (*tutorial);
+    tutorial->setBounds (getLocalBounds());
+    tutorial->showStep (0);
+}
+
 void ModdMuddEditor::requestRemoveModule (int module)
 {
     // Deferred: removing rebuilds the tabs, including the one that was clicked.
@@ -550,8 +673,10 @@ void ModdMuddEditor::layoutPanel (juce::Rectangle<int> panel)
     strip.removeFromLeft (kIsInstrumentBuild ? 130 : 104);
 
     layoutFlex (strip, { { &slotButton, 260, 110 }, { &addButton, 28, 28 }, { nullptr, 4000, 0 } }, 4);
-    auto right = strip.removeFromRight (juce::jmin (strip.getWidth() / 2, 250));
-    layoutFlex (right, { { &viewButton, 86, 66 }, { &presetButton, 74, 58 }, { &settingsButton, 74, 58 } }, 4);
+    auto right = strip.removeFromRight (juce::jmin (strip.getWidth() / 2, 330));
+    layoutFlex (right, { { &viewButton, 86, 66 }, { &presetButton, 74, 58 }, { &settingsButton, 74, 58 },
+                         { &tutorialButton, 76, 28 } }, 4);
+    tutorialButton.setButtonText (tutorialButton.getWidth() >= 60 ? "Tutorial" : "?");
 
     // Keep the plug-in button and "+" clear of the right-hand buttons.
     const int maxLeft = right.getX() - 8;
@@ -596,6 +721,9 @@ void ModdMuddEditor::resized()
     auto r = getLocalBounds();
     layoutPanel (r.removeFromBottom (panelHeight));
     hosted.setBounds (r);
+
+    if (tutorial != nullptr)
+        tutorial->setBounds (getLocalBounds());
 
     // A resizable plug-in follows the window; the window then snaps back to
     // whatever size the plug-in actually accepted.
@@ -754,6 +882,8 @@ void ModdMuddEditor::showSettingsMenu()
     m.addSeparator();
     m.addSubMenu ("Modulation resolution", sub);
     m.addSubMenu ("Theme", theme);
+    m.addSeparator();
+    m.addItem (4, "Show tutorial");
 
     juce::Component::SafePointer<ModdMuddEditor> safe (this);
     m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&settingsButton), [safe] (int r)
@@ -765,6 +895,7 @@ void ModdMuddEditor::showSettingsMenu()
         if (r == 1) cat.startScan (false);
         else if (r == 2) cat.startScan (true);
         else if (r == 3) cat.cancelScan();
+        else if (r == 4) safe->startTutorial();
         else if (r >= 100 && r < 300) proc.setSubBlockSize (r - 100);
         else if (r >= 300 && r < 400)
         {
